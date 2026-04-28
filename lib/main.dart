@@ -1,3 +1,4 @@
+import 'package:ensinolinguagens/screens/alphabet_screen.dart';
 import 'package:ensinolinguagens/screens/welcome_screen.dart';
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,6 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: ExercicioTela());
+    return MaterialApp(home: AlphabetScreen());
   }
 }

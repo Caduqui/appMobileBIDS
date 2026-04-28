@@ -1,15 +1,7 @@
-import 'package:ensinolinguagens/models/model.dart';
-import 'package:ensinolinguagens/models/novo_model.dart';
 import 'package:flutter/material.dart';
 
 class ExercicioTela extends StatelessWidget {
   ExercicioTela({super.key});
-
-  final Model model = Model(id: "EX001", name: "Gabriel");
-  final List<Palavras> listaPalavras = [
-    Palavras(id: "SE001", palavra: "Arara"),
-    Palavras(id: "SE002", palavra: "Urubu"),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +23,7 @@ class ExercicioTela extends StatelessWidget {
               "Como fazer?",
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            Text(model.name),
+
             Divider(),
           ],
         ),
