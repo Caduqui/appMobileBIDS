@@ -5,18 +5,22 @@ import '../widgets/trace_layer.dart';
 import '../widgets/draw_painter.dart';
 
 class AlphabetScreen extends StatefulWidget {
+  //StatefulWidget porque a tela muda (desenho do usuário)
   @override
   _AlphabetScreenState createState() => _AlphabetScreenState();
 }
 
 class _AlphabetScreenState extends State<AlphabetScreen> {
   List<Offset> userPoints = [];
+  //Lista que guarda onde o usuário passou o dedo
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      //estrutura base da tela
       body: Stack(
         children: [
+          //permite sobrepor elementos (fundo, letra, desenho)
           Positioned.fill(
             child: Container(color: Colors.blue), // Placeholder para fundo
           ),
@@ -26,7 +30,7 @@ class _AlphabetScreenState extends State<AlphabetScreen> {
               'Letra A',
               style: TextStyle(fontSize: 50, color: Colors.white),
             ),
-          ), // Placeholder para letra
+          ), // Placeholder para letra central(depois vira imagem)
 
           GestureDetector(
             onPanUpdate: (details) {
