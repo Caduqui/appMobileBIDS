@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'screens/memory_game_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +32,7 @@ class MemoryGameApp extends StatelessWidget {
         primarySwatch: Colors.teal,
         fontFamily: 'Roboto',
       ),
-      home: const MemoryGameScreen(),
+      home: const HomeScreen(),
     );
   }
 }

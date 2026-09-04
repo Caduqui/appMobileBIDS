@@ -41,38 +41,29 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8E7),
-      body: Column(
-        children: [
-          Expanded(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        const crossAxisCount = 4;
-                        const spacing = 8.0;
-                        // Distância fixa garantida entre a fileira de cima/baixo
-                        // e a borda da tela — resolve de vez o corte da última
-                        // fileira, já que o Padding reserva esse espaço antes
-                        // do GridView calcular qualquer coisa.
-                        const edgeInset = 10.0;
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          const crossAxisCount = 4;
+                          const spacing = 8.0;
 
-                        final availableWidth = constraints.maxWidth;
-                        final availableHeight = constraints.maxHeight - (edgeInset * 2);
+                          final totalHSpacing = spacing * (crossAxisCount - 1);
+                          final totalVSpacing = spacing * (crossAxisCount - 1);
 
-                        final totalHSpacing = spacing * (crossAxisCount - 1);
-                        final totalVSpacing = spacing * (crossAxisCount - 1);
+                          final tileWidth =
+                              (constraints.maxWidth - totalHSpacing) / crossAxisCount;
+                          final tileHeight =
+                              (constraints.maxHeight - totalVSpacing) / crossAxisCount;
 
-                        final tileWidth =
-                            (availableWidth - totalHSpacing) / crossAxisCount;
-                        final tileHeight =
-                            (availableHeight - totalVSpacing) / crossAxisCount;
-
-                        return Padding(
-                          padding: const EdgeInsets.only(top: edgeInset, bottom: edgeInset),
-                          child: GridView.builder(
+                          return GridView.builder(
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: _controller.cards.length,
                             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -89,30 +80,30 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
                                 onTap: () => _controller.onCardTap(card),
                               );
                             },
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  CelebrationOverlay(triggerKey: _celebrateKey),
-                ],
-              ),
-            ),
-          if (isCompleted)
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: ElevatedButton.icon(
-                onPressed: () => _controller.startPhase(),
-                icon: const Icon(Icons.replay),
-                label: const Text('Jogar novamente'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    CelebrationOverlay(triggerKey: _celebrateKey),
+                  ],
                 ),
               ),
-            ),
-        ],
+            if (isCompleted)
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: ElevatedButton.icon(
+                  onPressed: () => _controller.startPhase(),
+                  icon: const Icon(Icons.replay),
+                  label: const Text('Jogar novamente'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
