@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/memory_card_model.dart';
+import 'word_image.dart';
 
 class MemoryCardWidget extends StatefulWidget {
   final MemoryCardModel card;
@@ -130,14 +131,19 @@ class _MemoryCardWidgetState extends State<MemoryCardWidget>
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
-              child: Image.asset(widget.card.fruit.imagePath, fit: BoxFit.contain),
+              child: WordImage(item: widget.card.item),
             ),
           ),
+          // FittedBox: nomes longos ("Caranguejo", "Helicóptero") encolhem
+          // em vez de estourar a largura do card nas grades de 4 colunas.
           Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Text(
-              widget.card.fruit.name,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                widget.card.item.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
           ),
         ],

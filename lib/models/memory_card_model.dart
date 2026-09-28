@@ -1,4 +1,4 @@
-import 'fruit.dart';
+import 'word_item.dart';
 
 /// Estado individual de cada carta.
 /// mismatchError é um estado próprio (não reaproveita faceUp) para que a UI
@@ -8,12 +8,12 @@ enum CardState { faceDown, faceUp, matched, mismatchError }
 
 class MemoryCardModel {
   final String cardId;
-  final Fruit fruit;
+  final WordItem item;
   final CardState state;
 
   const MemoryCardModel({
     required this.cardId,
-    required this.fruit,
+    required this.item,
     this.state = CardState.faceDown,
   });
 
@@ -24,7 +24,7 @@ class MemoryCardModel {
   MemoryCardModel copyWith({CardState? state}) {
     return MemoryCardModel(
       cardId: cardId,
-      fruit: fruit,
+      item: item,
       state: state ?? this.state,
     );
   }
