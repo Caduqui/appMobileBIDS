@@ -13,7 +13,7 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-
+  video_player: ^2.14.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -29,3 +29,9 @@ flutter:
     - assets/fruits/
     - assets/cards/
     - assets/images/background/
+    # Sons das Letras: um vídeo por letra (a.mp4 ... z.mp4). Ver AGENTS.md.
+    - assets/videos/letters/
+    # Áudio do som de cada letra (a.mp3 ... z.mp3) e das palavras de exemplo
+    # (<id da palavra>.mp3). Ver AGENTS.md.
+    - assets/audio/letters/
+    - assets/audio/words/

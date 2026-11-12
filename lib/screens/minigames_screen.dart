@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../data/completion_phases.dart';
+import '../data/letter_phases.dart';
 import '../data/memory_phases.dart';
 import '../utils/responsive.dart';
 import 'completion_game_screen.dart';
 import 'difficulty_screen.dart';
+import 'letter_sounds_screen.dart';
 import 'memory_game_screen.dart';
 
 const _memoryTitle = 'Jogo da Memória';
 const _completionTitle = 'Complete a Palavra';
+const _letterSoundsTitle = 'Sons das Letras';
 
 class MinigamesScreen extends StatelessWidget {
   const MinigamesScreen({super.key});
@@ -86,6 +89,46 @@ class MinigamesScreen extends StatelessWidget {
                         );
                       },
                     ),
+                    _MinigameCard(
+                      title: _letterSoundsTitle,
+                      // Sem arte própria ainda: "Aa" desenhado, na mesma
+                      // proporção do card da memória pra os cards ficarem
+                      // do mesmo tamanho.
+                      art: const ColoredBox(
+                        color: Colors.teal,
+                        child: FittedBox(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text(
+                              'Aa',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      imageSize: const Size(1011, 1432),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DifficultyScreen(
+                              gameTitle: _letterSoundsTitle,
+                              phaseTitlesFor: (difficulty) => [
+                                for (final phase in kLetterPhases[difficulty]!)
+                                  phase.title,
+                              ],
+                              gameBuilder: (difficulty, phaseIndex) =>
+                                  LetterSoundsScreen(
+                                    difficulty: difficulty,
+                                    phaseIndex: phaseIndex,
+                                  ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     // Novos minigames entram aqui como novos _MinigameCard.
                   ],
                 ),
@@ -100,7 +143,11 @@ class MinigamesScreen extends StatelessWidget {
 
 class _MinigameCard extends StatelessWidget {
   final String title;
-  final String imagePath;
+
+  /// Arte do card: um arquivo ([imagePath]) ou, pra jogo sem arte própria,
+  /// um widget desenhado ([art]). Um dos dois é obrigatório.
+  final String? imagePath;
+  final Widget? art;
 
   /// Tamanho em pixels do arquivo da imagem. Só a proporção importa: a
   /// miniatura usa a mesma, então nada da arte é cortado.
@@ -109,10 +156,11 @@ class _MinigameCard extends StatelessWidget {
 
   const _MinigameCard({
     required this.title,
-    required this.imagePath,
+    this.imagePath,
+    this.art,
     required this.imageSize,
     required this.onTap,
-  });
+  }) : assert(imagePath != null || art != null);
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +177,8 @@ class _MinigameCard extends StatelessWidget {
               aspectRatio: imageSize.width / imageSize.height,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.asset(imagePath, fit: BoxFit.cover),
+                child:
+                    art ?? Image.asset(imagePath!, fit: BoxFit.cover),
               ),
             ),
             const SizedBox(height: 8),

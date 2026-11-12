@@ -1,6 +1,7 @@
 import '../models/word_item.dart';
 
-/// Vocabulário único usado pelos dois jogos (memória e completar).
+/// Vocabulário único usado pelos jogos (memória, completar e as palavras
+/// de exemplo do Sons das Letras).
 /// As 8 frutas originais usam PNG; o resto usa emoji até existir arte própria
 /// (é só preencher `imagePath` no item para trocar).
 abstract final class Words {
@@ -317,4 +318,73 @@ abstract final class Words {
     name: 'Entediado',
     emoji: '🥱',
   );
+
+  // ---- Sons das Letras ----
+  // Palavras de exemplo dos slides do Método das Boquinhas (as que não
+  // existiam acima). O `id` é o nome do áudio em assets/audio/words/ — não
+  // renomeie um sem renomear o outro. Ver data/letter_phases.dart.
+  static const amor = WordItem(id: 'amor', name: 'Amor', emoji: '❤️');
+  static const telhado = WordItem(id: 'telhado', name: 'Telhado', emoji: '🏘️');
+  static const porta = WordItem(id: 'porta', name: 'Porta', emoji: '🚪');
+  static const ema = WordItem(id: 'ema', name: 'Ema', emoji: '🐦');
+  static const boneca = WordItem(id: 'boneca', name: 'Boneca', emoji: '🪆');
+  static const cafe = WordItem(id: 'cafe', name: 'Café', emoji: '☕');
+  static const igreja = WordItem(id: 'igreja', name: 'Igreja', emoji: '⛪');
+  static const palito = WordItem(id: 'palito', name: 'Palito', emoji: '🥢');
+  static const saci = WordItem(id: 'saci', name: 'Saci', emoji: '🌪️');
+  static const calota = WordItem(id: 'calota', name: 'Calota', emoji: '🛞');
+  static const circo = WordItem(id: 'circo', name: 'Circo', emoji: '🎪');
+  static const saude = WordItem(id: 'saude', name: 'Saúde', emoji: '💪');
+  static const caju = WordItem(id: 'caju', name: 'Caju', emoji: '🌰');
+  static const pelado = WordItem(id: 'pelado', name: 'Pelado', emoji: '👶');
+  static const mola = WordItem(id: 'mola', name: 'Mola', emoji: '🌀');
+  static const apito = WordItem(id: 'apito', name: 'Apito', emoji: '📣');
+  static const capa = WordItem(id: 'capa', name: 'Capa', emoji: '🦸');
+  static const novelo = WordItem(id: 'novelo', name: 'Novelo', emoji: '🧶');
+  static const nove = WordItem(id: 'nove', name: 'Nove', emoji: '9️⃣');
+  static const tatu = WordItem(id: 'tatu', name: 'Tatu', emoji: '🦔');
+  static const metade = WordItem(id: 'metade', name: 'Metade', emoji: '🌗');
+  static const mesa = WordItem(id: 'mesa', name: 'Mesa', emoji: '🍽️');
+  static const camisa = WordItem(id: 'camisa', name: 'Camisa', emoji: '👕');
+  static const cama = WordItem(id: 'cama', name: 'Cama', emoji: '🛏️');
+  static const faca = WordItem(id: 'faca', name: 'Faca', emoji: '🔪');
+  static const alfinete = WordItem(id: 'alfinete', name: 'Alfinete', emoji: '📍');
+  static const cabide = WordItem(id: 'cabide', name: 'Cabide', emoji: '🧥');
+  static const bambu = WordItem(id: 'bambu', name: 'Bambu', emoji: '🎋');
+  static const navio = WordItem(id: 'navio', name: 'Navio', emoji: '🚢');
+  static const pena = WordItem(id: 'pena', name: 'Pena', emoji: '🪶');
+  static const medalha = WordItem(id: 'medalha', name: 'Medalha', emoji: '🏅');
+  static const casa = WordItem(id: 'casa', name: 'Casa', emoji: '🏠');
+  static const carroca = WordItem(id: 'carroca', name: 'Carroça', emoji: '🛒');
+  static const terra = WordItem(id: 'terra', name: 'Terra', emoji: '🌍');
+  static const fogo = WordItem(id: 'fogo', name: 'Fogo', emoji: '🔥');
+  static const jarra = WordItem(id: 'jarra', name: 'Jarra', emoji: '🏺');
+  static const passeio = WordItem(id: 'passeio', name: 'Passeio', emoji: '🚶');
+  static const xicara = WordItem(id: 'xicara', name: 'Xícara', emoji: '🫖');
+  static const caixa = WordItem(id: 'caixa', name: 'Caixa', emoji: '📦');
+  static const cozinha = WordItem(id: 'cozinha', name: 'Cozinha', emoji: '🍳');
+
+  // Letras que os slides não cobrem (H não tem som; K, W e Y vêm de outras
+  // línguas): palavras nossas, sem áudio.
+  static const hipopotamo = WordItem(
+    id: 'hipopotamo',
+    name: 'Hipopótamo',
+    emoji: '🦛',
+  );
+  static const hora = WordItem(id: 'hora', name: 'Hora', emoji: '⏰');
+  static const kiwi = WordItem(id: 'kiwi', name: 'Kiwi', emoji: '🥝');
+  static const karate = WordItem(id: 'karate', name: 'Karatê', emoji: '🥋');
+  static const ketchup = WordItem(id: 'ketchup', name: 'Ketchup', emoji: '🍅');
+  static const quadro = WordItem(id: 'quadro', name: 'Quadro', emoji: '🖼️');
+  static const quatro = WordItem(id: 'quatro', name: 'Quatro', emoji: '4️⃣');
+  static const waffle = WordItem(id: 'waffle', name: 'Waffle', emoji: '🧇');
+  static const wifi = WordItem(id: 'wifi', name: 'Wi-Fi', emoji: '📶');
+  static const web = WordItem(id: 'web', name: 'Web', emoji: '🌐');
+  static const yoga = WordItem(id: 'yoga', name: 'Yoga', emoji: '🧘');
+  static const yakisoba = WordItem(
+    id: 'yakisoba',
+    name: 'Yakisoba',
+    emoji: '🍜',
+  );
+  static const yeti = WordItem(id: 'yeti', name: 'Yeti', emoji: '⛄');
 }

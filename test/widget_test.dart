@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:linguagens/data/completion_phases.dart';
+import 'package:linguagens/data/letter_phases.dart';
 import 'package:linguagens/data/memory_phases.dart';
 import 'package:linguagens/main.dart';
 import 'package:linguagens/models/difficulty.dart';
 import 'package:linguagens/screens/completion_game_screen.dart';
+import 'package:linguagens/screens/letter_sounds_screen.dart';
+import 'package:linguagens/models/mouth_pose.dart';
 import 'package:linguagens/screens/memory_game_screen.dart';
+import 'package:linguagens/widgets/mouth_view.dart';
 
 // Tamanhos físicos a devicePixelRatio 3.0 (ver _useDevice). O app agora
 // precisa funcionar nessas 4 combinações — ver lib/utils/responsive.dart.
@@ -276,6 +280,117 @@ void main() {
           expect(kCompletionPhases[difficulty]![i].words, isNotEmpty);
         });
       }
+
+      final letterPhaseCount = kLetterPhases[difficulty]!.length;
+      for (var i = 0; i < letterPhaseCount; i++) {
+        testWidgets(
+            'sons das letras ${difficulty.label} fase ${i + 1} (${deviceEntry.key}) renderiza sem erro',
+            (tester) async {
+          _useDevice(tester, deviceEntry.value);
+          final phase = kLetterPhases[difficulty]![i];
+          await tester.pumpWidget(MaterialApp(
+            home: LetterSoundsScreen(difficulty: difficulty, phaseIndex: i),
+          ));
+          await _letVideoLoad(tester);
+          expect(tester.takeException(), isNull);
+          expect(find.text('${phase.letter}${phase.letter.toLowerCase()}'), findsOneWidget);
+
+          await tester.pumpWidget(const SizedBox());
+          await tester.pump(const Duration(seconds: 2));
+        });
+      }
     }
   }
+
+  testWidgets('Home → jogos → Sons das Letras → fácil → letra A', (tester) async {
+    _usePhoneScreen(tester);
+    await tester.pumpWidget(const MemoryGameApp());
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+
+    // Terceiro card: em celular retrato fica abaixo dos outros dois.
+    await tester.ensureVisible(find.text('Sons das Letras'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sons das Letras'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fácil'));
+    await tester.pumpAndSettle();
+    expect(find.text('Letra A'), findsOneWidget);
+    expect(find.text('Letra I'), findsOneWidget);
+
+    await tester.tap(find.text('Fase 1'));
+    await tester.pumpAndSettle();
+    await _letVideoLoad(tester);
+    expect(find.text('Aa'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('sons das letras: sem vídeo gravado mostra a boquinha desenhada e as palavras', (tester) async {
+    _usePhoneScreen(tester);
+    // "W" é a letra com menos chance de um dia ganhar vídeo gravado; se
+    // ganhar, este teste é que precisa trocar de letra.
+    final phases = kLetterPhases[Difficulty.hard]!;
+    final index = phases.indexWhere((p) => p.letter == 'W');
+    await tester.pumpWidget(MaterialApp(
+      home: LetterSoundsScreen(difficulty: Difficulty.hard, phaseIndex: index),
+    ));
+    await _letVideoLoad(tester);
+
+    expect(find.byType(MouthView), findsOneWidget);
+    for (final word in phases[index].words) {
+      expect(find.text(word.name, findRichText: true), findsOneWidget);
+    }
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('sons das letras: a boquinha se mexe ao tocar e volta ao repouso', (tester) async {
+    _usePhoneScreen(tester);
+    await tester.pumpWidget(const MaterialApp(
+      home: LetterSoundsScreen(difficulty: Difficulty.easy, phaseIndex: 0),
+    ));
+    await _letVideoLoad(tester);
+    // Deixa a animação automática da abertura terminar.
+    await tester.pump(const Duration(seconds: 3));
+
+    MouthPose pose() => tester.widget<MouthView>(find.byType(MouthView)).pose;
+    expect(pose().lips, 0);
+
+    await tester.tap(find.text('Ouvir de novo'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(pose().lips, 1, reason: 'no meio do som do "A" a boca está toda aberta');
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(pose().lips, 0);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('sons das letras: o H avisa que não tem som', (tester) async {
+    _usePhoneScreen(tester);
+    final index = kLetterPhases[Difficulty.easy]!.indexWhere((p) => p.letter == 'H');
+    await tester.pumpWidget(MaterialApp(
+      home: LetterSoundsScreen(difficulty: Difficulty.easy, phaseIndex: index),
+    ));
+    await _letVideoLoad(tester);
+
+    expect(find.text('O H não tem som'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
+}
+
+/// O manifesto de assets é lido de verdade (I/O real), que o relógio falso
+/// do testWidgets não avança sozinho — runAsync deixa a leitura terminar.
+Future<void> _letVideoLoad(WidgetTester tester) async {
+  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
 }
