@@ -26,9 +26,10 @@ class _CelebrationOverlayState extends State<CelebrationOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _scale = Tween<double>(begin: 0.5, end: 1.4).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _scale = Tween<double>(
+      begin: 0.5,
+      end: 1.4,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
     _fade = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _controller, curve: const Interval(0.4, 1.0)),
     );
@@ -54,14 +55,19 @@ class _CelebrationOverlayState extends State<CelebrationOverlay>
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          if (_controller.value == 0 || _controller.status == AnimationStatus.dismissed) {
+          if (_controller.value == 0 ||
+              _controller.status == AnimationStatus.dismissed) {
             return const SizedBox.shrink();
           }
           return Opacity(
             opacity: _fade.value,
             child: Transform.scale(
               scale: _scale.value,
-              child: const Icon(Icons.star_rounded, color: Colors.amber, size: 90),
+              child: const Icon(
+                Icons.star_rounded,
+                color: Colors.amber,
+                size: 90,
+              ),
             ),
           );
         },

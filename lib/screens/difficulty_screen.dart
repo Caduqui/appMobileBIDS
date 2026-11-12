@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../models/difficulty.dart';
+import '../utils/responsive.dart';
 import 'phases_screen.dart';
 
 Color difficultyColor(Difficulty difficulty) => switch (difficulty) {
-      Difficulty.easy => Colors.green,
-      Difficulty.medium => Colors.orange,
-      Difficulty.hard => Colors.red,
-    };
+  Difficulty.easy => Colors.green,
+  Difficulty.medium => Colors.orange,
+  Difficulty.hard => Colors.red,
+};
 
 /// Segunda etapa do fluxo: depois de escolher o jogo, escolhe a dificuldade.
 /// Serve a qualquer minigame — quem chama diz como listar as fases de cada
@@ -40,9 +41,16 @@ class DifficultyScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Escolha a dificuldade',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: responsiveValue(
+                      context,
+                      phone: 22.0,
+                      tablet: 28.0,
+                    ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 for (final difficulty in Difficulty.values) ...[
@@ -80,22 +88,34 @@ class _DifficultyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = responsiveValue(context, phone: 240.0, tablet: 340.0);
+    final height = responsiveValue(context, phone: 80.0, tablet: 100.0);
+    final fontSize = responsiveValue(context, phone: 24.0, tablet: 30.0);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 240,
-        height: 80,
+        width: width,
+        height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: difficultyColor(difficulty),
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 3)),
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 6,
+              offset: Offset(0, 3),
+            ),
           ],
         ),
         child: Text(
           difficulty.label,
-          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: fontSize,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

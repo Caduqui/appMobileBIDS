@@ -13,6 +13,8 @@ class WordItem {
     required this.name,
     this.imagePath,
     this.emoji,
-  }) : assert(imagePath != null || emoji != null,
-            'WordItem precisa de imagePath ou emoji');
+  }) : assert(
+         imagePath != null || emoji != null,
+         'WordItem precisa de imagePath ou emoji',
+       );
 }

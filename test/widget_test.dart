@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:linguagens/data/completion_phases.dart';
+import 'package:linguagens/data/memory_phases.dart';
 import 'package:linguagens/main.dart';
 import 'package:linguagens/models/difficulty.dart';
 import 'package:linguagens/screens/completion_game_screen.dart';
 import 'package:linguagens/screens/memory_game_screen.dart';
 
-/// Tela de celular em pé (360x800 lógicos), que é o alvo do app.
-void _usePhoneScreen(WidgetTester tester) {
-  tester.view.physicalSize = const Size(1080, 2400);
+// Tamanhos físicos a devicePixelRatio 3.0 (ver _useDevice). O app agora
+// precisa funcionar nessas 4 combinações — ver lib/utils/responsive.dart.
+const _devicePortraitPhone = Size(1080, 2400); // 360x800 lógicos
+const _deviceLandscapePhone = Size(2400, 1080); // 800x360 lógicos
+const _devicePortraitTablet = Size(2400, 3600); // 800x1200 lógicos (>=600 = tablet)
+const _deviceLandscapeTablet = Size(3600, 2400); // 1200x800 lógicos
+
+void _useDevice(WidgetTester tester, Size physicalSize) {
+  tester.view.physicalSize = physicalSize;
   tester.view.devicePixelRatio = 3.0;
   addTearDown(tester.view.reset);
 }
+
+/// Tela de celular em pé (360x800 lógicos), que é o alvo histórico do app.
+void _usePhoneScreen(WidgetTester tester) => _useDevice(tester, _devicePortraitPhone);
 
 void main() {
   testWidgets('Home → jogos → dificuldade → fases → jogo de completar', (tester) async {
@@ -128,33 +138,144 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  // Renderiza todas as fases em tela de celular pra pegar overflow de layout
-  // (nomes/palavras longas, grade 4x5 etc.).
-  for (final difficulty in Difficulty.values) {
-    for (var i = 0; i < 5; i++) {
-      testWidgets('memória ${difficulty.label} fase ${i + 1} renderiza sem erro', (tester) async {
-        _usePhoneScreen(tester);
-        await tester.pumpWidget(MaterialApp(
-          home: MemoryGameScreen(difficulty: difficulty, phaseIndex: i),
-        ));
-        await tester.pump();
+  testWidgets('lobby em paisagem: imagem e botões lado a lado, sem overflow', (tester) async {
+    _useDevice(tester, _deviceLandscapePhone);
+    await tester.pumpWidget(const MemoryGameApp());
+    await tester.pump();
 
-        expect(find.byType(GridView), findsOneWidget);
-        expect(tester.takeException(), isNull);
+    expect(find.text('Iniciar'), findsOneWidget);
+    expect(find.text('Sair'), findsOneWidget);
 
-        await tester.pump(Duration(seconds: difficulty.previewSeconds + 1));
-        await tester.pumpWidget(const SizedBox());
-      });
+    // Em paisagem a imagem é dimensionada pela altura da tela (não mais
+    // "colada embaixo" na largura inteira, que cortaria quase tudo de uma
+    // arte vertical numa tela baixa).
+    final image = tester.getRect(assetImage('assets/images/background/home.png'));
+    expect(image.height, closeTo(360, 0.5));
+    expect(tester.takeException(), isNull);
+  });
 
-      testWidgets('completar ${difficulty.label} fase ${i + 1} renderiza sem erro', (tester) async {
-        _usePhoneScreen(tester);
-        await tester.pumpWidget(MaterialApp(
-          home: CompletionGameScreen(difficulty: difficulty, phaseIndex: i),
-        ));
-        await tester.pump();
-        expect(tester.takeException(), isNull);
-        expect(kCompletionPhases[difficulty]![i].words, isNotEmpty);
-      });
+  testWidgets('navegação em tablet retrato, sem overflow', (tester) async {
+    _useDevice(tester, _devicePortraitTablet);
+    await tester.pumpWidget(const MemoryGameApp());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Jogo da Memória'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Jogo da Memória'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Fácil'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('navegação em tablet paisagem, sem overflow', (tester) async {
+    _useDevice(tester, _deviceLandscapeTablet);
+    await tester.pumpWidget(const MemoryGameApp());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Complete a Palavra'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Complete a Palavra'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Difícil'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('grid da memória inverte colunas/linhas em paisagem', (tester) async {
+    _useDevice(tester, _deviceLandscapePhone);
+    await tester.pumpWidget(MaterialApp(
+      home: MemoryGameScreen(difficulty: Difficulty.easy, phaseIndex: 0),
+    ));
+    await tester.pump();
+
+    final delegate = tester.widget<GridView>(find.byType(GridView)).gridDelegate
+        as SliverGridDelegateWithFixedCrossAxisCount;
+    // Fácil é 3 colunas x 4 linhas em retrato; numa tela mais larga que alta
+    // o grid inverte pra 4 colunas x 3 linhas (mesmo total de 12 cards) pra
+    // elas não ficarem esticadas horizontalmente.
+    expect(delegate.crossAxisCount, Difficulty.easy.memoryRows);
+
+    // Descarta a tela e deixa o timer de preview (4s) terminar — senão o
+    // teste falha por "pending timers" mesmo sem nada de errado no layout.
+    await tester.pump(Duration(seconds: Difficulty.easy.previewSeconds + 1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('grid da memória mantém colunas originais em retrato', (tester) async {
+    _usePhoneScreen(tester);
+    await tester.pumpWidget(MaterialApp(
+      home: MemoryGameScreen(difficulty: Difficulty.easy, phaseIndex: 0),
+    ));
+    await tester.pump();
+
+    final delegate = tester.widget<GridView>(find.byType(GridView)).gridDelegate
+        as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(delegate.crossAxisCount, Difficulty.easy.memoryColumns);
+
+    await tester.pump(Duration(seconds: Difficulty.easy.previewSeconds + 1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  // Renderiza todas as fases dos dois jogos nas 4 combinações de dispositivo
+  // (celular/tablet x retrato/paisagem) pra pegar overflow de layout (nomes/
+  // palavras longas, grade invertida em paisagem etc.). O nº de fases varia
+  // por dificuldade (ver _expectedPhaseCounts em game_data_test.dart), então
+  // o loop lê o tamanho real de cada lista em vez de um número fixo.
+  const deviceConfigs = {
+    'celular retrato': _devicePortraitPhone,
+    'celular paisagem': _deviceLandscapePhone,
+    'tablet retrato': _devicePortraitTablet,
+    'tablet paisagem': _deviceLandscapeTablet,
+  };
+
+  for (final deviceEntry in deviceConfigs.entries) {
+    for (final difficulty in Difficulty.values) {
+      final memoryPhaseCount = kMemoryPhases[difficulty]!.length;
+      for (var i = 0; i < memoryPhaseCount; i++) {
+        testWidgets(
+            'memória ${difficulty.label} fase ${i + 1} (${deviceEntry.key}) renderiza sem erro',
+            (tester) async {
+          _useDevice(tester, deviceEntry.value);
+          await tester.pumpWidget(MaterialApp(
+            home: MemoryGameScreen(difficulty: difficulty, phaseIndex: i),
+          ));
+          await tester.pump();
+
+          expect(find.byType(GridView), findsOneWidget);
+          expect(tester.takeException(), isNull);
+
+          await tester.pump(Duration(seconds: difficulty.previewSeconds + 1));
+          await tester.pumpWidget(const SizedBox());
+        });
+      }
+
+      final completionPhaseCount = kCompletionPhases[difficulty]!.length;
+      for (var i = 0; i < completionPhaseCount; i++) {
+        testWidgets(
+            'completar ${difficulty.label} fase ${i + 1} (${deviceEntry.key}) renderiza sem erro',
+            (tester) async {
+          _useDevice(tester, deviceEntry.value);
+          await tester.pumpWidget(MaterialApp(
+            home: CompletionGameScreen(difficulty: difficulty, phaseIndex: i),
+          ));
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+          expect(kCompletionPhases[difficulty]![i].words, isNotEmpty);
+        });
+      }
     }
   }
 }

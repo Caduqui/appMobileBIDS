@@ -55,6 +55,25 @@ void main() {
     expect(c.slots[3].isBlank, isFalse);
   });
 
+  test('palavra curta demais pro nº de lacunas da dificuldade usa menos lacunas', () {
+    // "Uva" (3 letras) no Fácil (que pede 2 lacunas) deixaria só 1 letra
+    // visível — o controller reduz sozinho pra 1 lacuna em vez de barrar a
+    // palavra ou deixar o jogo impossível de reconhecer.
+    final c = CompletionGameController(
+      words: [Words.uva],
+      missingLetters: 2,
+      random: Random(1),
+    )..startPhase();
+
+    final blanks = c.slots.where((s) => s.isBlank).length;
+    expect(blanks, 1);
+    expect(c.slots.length - blanks, 2); // 2 letras visíveis
+    expect(c.tiles, hasLength(1 + c.extraLetters));
+
+    _solveCurrentWord(c);
+    expect(c.status, CompletionStatus.phaseCompleted);
+  });
+
   test('letra errada não preenche e avisa', () {
     final c = _controller()..startPhase();
     var wrongCalls = 0;

@@ -18,6 +18,11 @@ class CompletionGameController extends ChangeNotifier {
   }) : _random = random ?? Random();
 
   final List<WordItem> _words;
+
+  /// Nº de lacunas "alvo" da dificuldade. É um teto, não um valor fixo: uma
+  /// palavra curta demais pra esse nº (ex.: "Uva" no Fácil, que pede 2) usa
+  /// menos lacunas em vez de ficar sem jogo ou sem letra visível — ver
+  /// `_startWord`.
   final int _missingLetters;
   final Random _random;
 
@@ -58,7 +63,17 @@ class CompletionGameController extends ChangeNotifier {
       for (var i = 0; i < chars.length; i++)
         if (isBlankableLetter(chars[i])) i,
     ]..shuffle(_random);
-    final blanks = candidates.take(_missingLetters).toSet();
+
+    // Nunca esconde mais letras do que a palavra comporta deixando pelo
+    // menos 2 à vista. Pra palavras do tamanho normal do vocabulário isso
+    // nunca entra em ação (maxMissingForWord fica bem acima de
+    // _missingLetters); só limita o caso de uma palavra bem curta, tipo
+    // "Uva" (3 letras) no Fácil, que pediria 2 lacunas mas só comporta 1.
+    final maxMissingForWord = (chars.length - 2).clamp(1, candidates.length);
+    final missingCount = _missingLetters < maxMissingForWord
+        ? _missingLetters
+        : maxMissingForWord;
+    final blanks = candidates.take(missingCount).toSet();
 
     slots = [
       for (var i = 0; i < chars.length; i++)
@@ -74,7 +89,8 @@ class CompletionGameController extends ChangeNotifier {
       ..._pickExtraLetters(chars),
     ]..shuffle(_random);
     tiles = [
-      for (var i = 0; i < letters.length; i++) LetterTile(id: i, letter: letters[i]),
+      for (var i = 0; i < letters.length; i++)
+        LetterTile(id: i, letter: letters[i]),
     ];
 
     selectedSlot = _firstEmptySlot();
@@ -85,8 +101,9 @@ class CompletionGameController extends ChangeNotifier {
   /// sobrando que pareça certo mas não serve.
   List<String> _pickExtraLetters(List<String> wordChars) {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    final pool = alphabet.split('').where((l) => !wordChars.contains(l)).toList()
-      ..shuffle(_random);
+    final pool =
+        alphabet.split('').where((l) => !wordChars.contains(l)).toList()
+          ..shuffle(_random);
     return pool.take(extraLetters).toList();
   }
 
@@ -123,7 +140,9 @@ class CompletionGameController extends ChangeNotifier {
 
     selectedSlot = _nextEmptySlotAfter(selectedSlot);
     if (selectedSlot < 0) {
-      status = isLastWord ? CompletionStatus.phaseCompleted : CompletionStatus.wordSolved;
+      status = isLastWord
+          ? CompletionStatus.phaseCompleted
+          : CompletionStatus.wordSolved;
       onWordSolved?.call();
     }
     notifyListeners();

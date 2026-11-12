@@ -9,11 +9,7 @@ class MemoryCardWidget extends StatefulWidget {
   final MemoryCardModel card;
   final VoidCallback onTap;
 
-  const MemoryCardWidget({
-    super.key,
-    required this.card,
-    required this.onTap,
-  });
+  const MemoryCardWidget({super.key, required this.card, required this.onTap});
 
   @override
   State<MemoryCardWidget> createState() => _MemoryCardWidgetState();
@@ -47,7 +43,8 @@ class _MemoryCardWidgetState extends State<MemoryCardWidget>
   void didUpdateWidget(covariant MemoryCardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final wasFaceVisible = oldWidget.card.state == CardState.faceUp ||
+    final wasFaceVisible =
+        oldWidget.card.state == CardState.faceUp ||
         oldWidget.card.state == CardState.matched ||
         oldWidget.card.state == CardState.mismatchError;
 
@@ -142,7 +139,10 @@ class _MemoryCardWidgetState extends State<MemoryCardWidget>
               fit: BoxFit.scaleDown,
               child: Text(
                 widget.card.item.name,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
             ),
           ),
@@ -162,10 +162,7 @@ class _MemoryCardWidgetState extends State<MemoryCardWidget>
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Image.asset(
-        'assets/cards/back_card.png',
-        fit: BoxFit.cover,
-      ),
+      child: Image.asset('assets/cards/back_card.png', fit: BoxFit.cover),
     );
   }
 }

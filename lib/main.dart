@@ -6,10 +6,14 @@ import 'screens/home_screen.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Jogo é somente em retrato.
+  // Retrato e paisagem liberados: celular e tablet, nas duas orientações.
+  // As telas (home_screen, memory_game_screen, completion_game_screen etc.)
+  // adaptam o layout conforme MediaQuery — ver lib/utils/responsive.dart.
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
   ]).then((_) {
     // Modo imersivo: esconde a barra de status (hora/bateria/wifi) e a
     // barra de navegação do Android. "immersiveSticky" permite que o
@@ -28,10 +32,7 @@ class MemoryGameApp extends StatelessWidget {
     return MaterialApp(
       title: 'Fase 1 — Jogo da Memória',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        fontFamily: 'Roboto',
-      ),
+      theme: ThemeData(primarySwatch: Colors.teal, fontFamily: 'Roboto'),
       home: const HomeScreen(),
     );
   }

@@ -52,9 +52,7 @@ class MemoryGameController extends ChangeNotifier {
 
     Future.delayed(_previewDuration, () {
       if (_disposed || round != _round) return;
-      cards = [
-        for (final c in cards) c.copyWith(state: CardState.faceDown),
-      ];
+      cards = [for (final c in cards) c.copyWith(state: CardState.faceDown)];
       status = GamePhaseStatus.waitingFirstPick;
       notifyListeners();
     });
@@ -63,15 +61,28 @@ class MemoryGameController extends ChangeNotifier {
   List<MemoryCardModel> _generateShuffledPairs() {
     final pairs = <MemoryCardModel>[];
     for (final item in _items) {
-      pairs.add(MemoryCardModel(cardId: '${item.id}_a', item: item, state: CardState.faceUp));
-      pairs.add(MemoryCardModel(cardId: '${item.id}_b', item: item, state: CardState.faceUp));
+      pairs.add(
+        MemoryCardModel(
+          cardId: '${item.id}_a',
+          item: item,
+          state: CardState.faceUp,
+        ),
+      );
+      pairs.add(
+        MemoryCardModel(
+          cardId: '${item.id}_b',
+          item: item,
+          state: CardState.faceUp,
+        ),
+      );
     }
     pairs.shuffle(Random());
     return pairs;
   }
 
   void onCardTap(MemoryCardModel tappedCard) {
-    final canTap = status == GamePhaseStatus.waitingFirstPick ||
+    final canTap =
+        status == GamePhaseStatus.waitingFirstPick ||
         status == GamePhaseStatus.waitingSecondPick;
     if (!canTap) return;
     if (tappedCard.state != CardState.faceDown) return;
@@ -100,7 +111,8 @@ class MemoryGameController extends ChangeNotifier {
     ];
   }
 
-  MemoryCardModel _cardById(String id) => cards.firstWhere((c) => c.cardId == id);
+  MemoryCardModel _cardById(String id) =>
+      cards.firstWhere((c) => c.cardId == id);
 
   void _resolvePair() {
     final round = _round;
@@ -137,7 +149,9 @@ class MemoryGameController extends ChangeNotifier {
     _secondPickId = null;
 
     final allMatched = cards.every((c) => c.state == CardState.matched);
-    status = allMatched ? GamePhaseStatus.completed : GamePhaseStatus.waitingFirstPick;
+    status = allMatched
+        ? GamePhaseStatus.completed
+        : GamePhaseStatus.waitingFirstPick;
     notifyListeners();
   }
 }

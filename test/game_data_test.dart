@@ -6,12 +6,20 @@ import 'package:linguagens/data/completion_phases.dart';
 import 'package:linguagens/data/memory_phases.dart';
 import 'package:linguagens/models/difficulty.dart';
 
+/// Fácil e Médio têm 8 fases (5 originais + Higiene, Emoções, Transportes);
+/// Difícil tem só 7 porque "Transportes" já existia lá e não duplicamos.
+const _expectedPhaseCounts = {
+  Difficulty.easy: 8,
+  Difficulty.medium: 8,
+  Difficulty.hard: 7,
+};
+
 void main() {
   group('Jogo da Memória', () {
     for (final difficulty in Difficulty.values) {
-      test('${difficulty.label}: 5 fases com ${difficulty.memoryPairs} pares únicos', () {
+      test('${difficulty.label}: ${_expectedPhaseCounts[difficulty]} fases com ${difficulty.memoryPairs} pares únicos', () {
         final phases = kMemoryPhases[difficulty]!;
-        expect(phases, hasLength(5));
+        expect(phases, hasLength(_expectedPhaseCounts[difficulty]!));
         expect(difficulty.memoryColumns * difficulty.memoryRows, difficulty.memoryPairs * 2);
 
         for (final phase in phases) {
@@ -50,17 +58,29 @@ void main() {
     });
 
     for (final difficulty in Difficulty.values) {
-      test('${difficulty.label}: 5 fases, palavras comportam as lacunas', () {
+      test('${difficulty.label}: ${_expectedPhaseCounts[difficulty]} fases, lacunas sempre jogáveis', () {
         final phases = kCompletionPhases[difficulty]!;
-        expect(phases, hasLength(5));
+        expect(phases, hasLength(_expectedPhaseCounts[difficulty]!));
 
         for (final phase in phases) {
           expect(phase.words, isNotEmpty);
           for (final word in phase.words) {
-            final chars = word.name.toUpperCase().split('');
-            final blankable = chars.where(isBlankableLetter).length;
-            expect(blankable, greaterThanOrEqualTo(difficulty.missingLetters), reason: word.name);
-            expect(chars.length, greaterThanOrEqualTo(difficulty.missingLetters + 2),
+            // Comportamental, não aritmético: o controller decide sozinho o
+            // nº de lacunas de cada palavra (CompletionGameController._
+            // startWord reduz o teto da dificuldade pra palavras curtas, tipo
+            // "Uva" no Fácil) — então testamos o resultado real em vez de
+            // recalcular a fórmula aqui e arriscar os dois divergirem.
+            final controller = CompletionGameController(
+              words: [word],
+              missingLetters: difficulty.missingLetters,
+            )..startPhase();
+
+            final blanks = controller.slots.where((s) => s.isBlank).length;
+            final visible = controller.slots.length - blanks;
+            expect(blanks, greaterThanOrEqualTo(1), reason: '${word.name}: nenhuma lacuna pra jogar');
+            expect(blanks, lessThanOrEqualTo(difficulty.missingLetters),
+                reason: '${word.name}: mais lacunas do que o nível permite');
+            expect(visible, greaterThanOrEqualTo(2),
                 reason: '${word.name}: sobraria menos de 2 letras à vista');
           }
         }

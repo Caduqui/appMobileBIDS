@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/completion_phases.dart';
 import '../data/memory_phases.dart';
+import '../utils/responsive.dart';
 import 'completion_game_screen.dart';
 import 'difficulty_screen.dart';
 import 'memory_game_screen.dart';
@@ -24,59 +25,71 @@ class MinigamesScreen extends StatelessWidget {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          // O Wrap só ocupa a largura do conteúdo; sem esse SizedBox ele
-          // ficava encostado na esquerda e o "center" valia só dentro dele.
-          child: SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 24,
-              runSpacing: 24,
-              children: [
-                _MinigameCard(
-                  title: _memoryTitle,
-                  imagePath: 'assets/cards/back_card.png',
-                  imageSize: const Size(1011, 1432),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DifficultyScreen(
-                          gameTitle: _memoryTitle,
-                          phaseTitlesFor: (difficulty) => [
-                            for (final phase in kMemoryPhases[difficulty]!) phase.title,
-                          ],
-                          gameBuilder: (difficulty, phaseIndex) => MemoryGameScreen(
-                            difficulty: difficulty,
-                            phaseIndex: phaseIndex,
+          child: Center(
+            // Limite de largura pra num tablet em paisagem os cards não
+            // ficarem espalhados longe um do outro na tela toda.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth(context)),
+              // O Wrap só ocupa a largura do conteúdo; sem esse SizedBox ele
+              // ficava encostado na esquerda e o "center" valia só dentro dele.
+              child: SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 24,
+                  runSpacing: 24,
+                  children: [
+                    _MinigameCard(
+                      title: _memoryTitle,
+                      imagePath: 'assets/cards/back_card.png',
+                      imageSize: const Size(1011, 1432),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DifficultyScreen(
+                              gameTitle: _memoryTitle,
+                              phaseTitlesFor: (difficulty) => [
+                                for (final phase in kMemoryPhases[difficulty]!)
+                                  phase.title,
+                              ],
+                              gameBuilder: (difficulty, phaseIndex) =>
+                                  MemoryGameScreen(
+                                    difficulty: difficulty,
+                                    phaseIndex: phaseIndex,
+                                  ),
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                _MinigameCard(
-                  title: _completionTitle,
-                  imagePath: 'assets/cards/completePalavra.jpg',
-                  imageSize: const Size(1251, 1886),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DifficultyScreen(
-                          gameTitle: _completionTitle,
-                          phaseTitlesFor: (difficulty) => [
-                            for (final phase in kCompletionPhases[difficulty]!) phase.title,
-                          ],
-                          gameBuilder: (difficulty, phaseIndex) => CompletionGameScreen(
-                            difficulty: difficulty,
-                            phaseIndex: phaseIndex,
+                        );
+                      },
+                    ),
+                    _MinigameCard(
+                      title: _completionTitle,
+                      imagePath: 'assets/cards/completePalavra.jpg',
+                      imageSize: const Size(1251, 1886),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DifficultyScreen(
+                              gameTitle: _completionTitle,
+                              phaseTitlesFor: (difficulty) => [
+                                for (final phase
+                                    in kCompletionPhases[difficulty]!)
+                                  phase.title,
+                              ],
+                              gameBuilder: (difficulty, phaseIndex) =>
+                                  CompletionGameScreen(
+                                    difficulty: difficulty,
+                                    phaseIndex: phaseIndex,
+                                  ),
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
+                        );
+                      },
+                    ),
+                    // Novos minigames entram aqui como novos _MinigameCard.
+                  ],
                 ),
-                // Novos minigames entram aqui como novos _MinigameCard.
-              ],
+              ),
             ),
           ),
         ),
@@ -103,10 +116,13 @@ class _MinigameCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = responsiveValue(context, phone: 180.0, tablet: 260.0);
+    final fontSize = responsiveValue(context, phone: 16.0, tablet: 20.0);
+
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 180,
+        width: width,
         child: Column(
           children: [
             AspectRatio(
@@ -120,7 +136,7 @@ class _MinigameCard extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize),
             ),
           ],
         ),

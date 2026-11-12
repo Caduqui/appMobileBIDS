@@ -4,6 +4,7 @@ import '../controllers/completion_game_controller.dart';
 import '../data/completion_phases.dart';
 import '../models/completion_models.dart';
 import '../models/difficulty.dart';
+import '../utils/responsive.dart';
 import '../widgets/celebration_overlay.dart';
 import '../widgets/shake_widget.dart';
 import '../widgets/word_image.dart';
@@ -75,6 +76,7 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
         title: Text(
           '${widget.difficulty.label} · Fase ${widget.phaseIndex + 1} — ${_phase.title}',
           style: const TextStyle(fontSize: 18),
+          overflow: TextOverflow.ellipsis,
         ),
         backgroundColor: difficultyColor(widget.difficulty),
         foregroundColor: Colors.white,
@@ -82,60 +84,132 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            children: [
-              Text(
-                'Palavra ${_controller.wordIndex + 1} de ${_controller.wordCount}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3)),
-                        ],
-                      ),
-                      child: WordImage(item: _controller.currentWord),
-                    ),
-                    CelebrationOverlay(triggerKey: _celebrateKey),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              ShakeWidget(
-                triggerKey: _wrongKey,
-                child: _buildSlots(),
-              ),
-              const SizedBox(height: 20),
-              _buildTiles(),
-              const SizedBox(height: 16),
-              _buildFooter(status),
-            ],
-          ),
+          child: isLandscape(context)
+              ? _buildLandscape(status)
+              : _buildPortrait(status),
         ),
       ),
     );
   }
 
+  /// Empilhado: a palavra em cima (ocupa o espaço que sobra), controles
+  /// embaixo. Funciona bem numa tela mais alta que larga.
+  Widget _buildPortrait(CompletionStatus status) {
+    return Column(
+      children: [
+        _buildProgressText(),
+        const SizedBox(height: 8),
+        Expanded(child: _buildWordCard()),
+        const SizedBox(height: 20),
+        ShakeWidget(triggerKey: _wrongKey, child: _buildSlots()),
+        const SizedBox(height: 20),
+        _buildTiles(),
+        const SizedBox(height: 16),
+        _buildFooter(status),
+      ],
+    );
+  }
+
+  /// Lado a lado: a palavra à esquerda, controles à direita. Numa tela
+  /// baixa (celular deitado), empilhar tudo verticalmente espremeria demais
+  /// a imagem da palavra — aqui ela mantém uma área decente mesmo com pouca
+  /// altura disponível.
+  Widget _buildLandscape(CompletionStatus status) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 4, child: _buildWordCard()),
+        const SizedBox(width: 20),
+        Expanded(
+          flex: 5,
+          // LayoutBuilder + ConstrainedBox(minHeight) + Center: centraliza
+          // verticalmente quando cabe (o caso comum) e deixa rolar quando não
+          // cabe, em vez de estourar o layout — numa tela de celular bem
+          // baixa (deitado), o Médio/Difícil pode ter peças suficientes pra
+          // quebrar em 2 linhas no Wrap e não caber na altura disponível.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildProgressText(),
+                        const SizedBox(height: 12),
+                        ShakeWidget(
+                          triggerKey: _wrongKey,
+                          child: _buildSlots(),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildTiles(),
+                        const SizedBox(height: 12),
+                        _buildFooter(status),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgressText() {
+    return Text(
+      'Palavra ${_controller.wordIndex + 1} de ${_controller.wordCount}',
+      style: TextStyle(
+        fontSize: responsiveValue(context, phone: 16.0, tablet: 20.0),
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+
+  Widget _buildWordCard() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: double.infinity,
+          height: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 6,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: WordImage(item: _controller.currentWord),
+        ),
+        CelebrationOverlay(triggerKey: _celebrateKey),
+      ],
+    );
+  }
+
   /// A palavra numa linha só: o tamanho de cada casinha encolhe conforme a
-  /// palavra é longa ("Helicóptero" precisa caber na largura do celular).
+  /// palavra é longa ("Helicóptero" precisa caber na largura do celular) e
+  /// cresce num tablet (mais espaço, letras maiores e mais fáceis de tocar).
   Widget _buildSlots() {
     const spacing = 6.0;
     final slots = _controller.slots;
     final playing = _controller.status == CompletionStatus.playing;
+    final minWidth = responsiveValue(context, phone: 24.0, tablet: 36.0);
+    final maxWidth = responsiveValue(context, phone: 52.0, tablet: 76.0);
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = ((constraints.maxWidth - spacing * (slots.length - 1)) / slots.length)
-            .clamp(24.0, 52.0);
+        final width =
+            ((constraints.maxWidth - spacing * (slots.length - 1)) /
+                    slots.length)
+                .clamp(minWidth, maxWidth);
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -179,37 +253,38 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
 
   Widget _buildFooter(CompletionStatus status) {
     // Altura fixa: os botões aparecem sem empurrar o resto da tela.
+    final height = responsiveValue(context, phone: 52.0, tablet: 64.0);
     return SizedBox(
-      height: 52,
+      height: height,
       child: switch (status) {
         CompletionStatus.playing => const SizedBox.shrink(),
         CompletionStatus.wordSolved => Center(
-            child: _FooterButton(
-              icon: Icons.arrow_forward,
-              label: 'Próxima palavra',
-              color: Colors.orange,
-              onPressed: _controller.nextWord,
-            ),
+          child: _FooterButton(
+            icon: Icons.arrow_forward,
+            label: 'Próxima palavra',
+            color: Colors.orange,
+            onPressed: _controller.nextWord,
           ),
+        ),
         CompletionStatus.phaseCompleted => Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            children: [
+          alignment: WrapAlignment.center,
+          spacing: 12,
+          children: [
+            _FooterButton(
+              icon: Icons.replay,
+              label: 'Jogar novamente',
+              color: Colors.teal,
+              onPressed: _controller.startPhase,
+            ),
+            if (_hasNextPhase)
               _FooterButton(
-                icon: Icons.replay,
-                label: 'Jogar novamente',
-                color: Colors.teal,
-                onPressed: _controller.startPhase,
+                icon: Icons.arrow_forward,
+                label: 'Próxima fase',
+                color: Colors.orange,
+                onPressed: _goToNextPhase,
               ),
-              if (_hasNextPhase)
-                _FooterButton(
-                  icon: Icons.arrow_forward,
-                  label: 'Próxima fase',
-                  color: Colors.orange,
-                  onPressed: _goToNextPhase,
-                ),
-            ],
-          ),
+          ],
+        ),
       },
     );
   }
@@ -279,22 +354,33 @@ class _TileButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = responsiveValue(context, phone: 56.0, tablet: 76.0);
+    final fontSize = responsiveValue(context, phone: 30.0, tablet: 38.0);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 56,
-        height: 56,
+        width: size,
+        height: size,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: Colors.teal,
           borderRadius: BorderRadius.circular(12),
           boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
           ],
         ),
         child: Text(
           letter,
-          style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: fontSize,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
@@ -316,6 +402,8 @@ class _FooterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fontSize = responsiveValue(context, phone: 14.0, tablet: 18.0);
+
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon),
@@ -324,6 +412,7 @@ class _FooterButton extends StatelessWidget {
         backgroundColor: color,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        textStyle: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
       ),
     );
   }
