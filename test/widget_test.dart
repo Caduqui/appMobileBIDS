@@ -363,7 +363,7 @@ void main() {
     await tester.tap(find.text('Ouvir de novo'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
-    expect(pose().lips, 1, reason: 'no meio do som do "A" a boca está toda aberta');
+    expect(pose().lips, closeTo(1, 0.05), reason: 'no meio do som do "A" a boca está toda aberta');
 
     await tester.pump(const Duration(seconds: 2));
     expect(pose().lips, 0);

@@ -40,9 +40,11 @@ Mantenha esse padrão ao editar.
 ```
 flutter pub get        # instalar dependências
 flutter analyze        # lint estático — deve ficar limpo (ver exceção abaixo)
-flutter test           # roda toda a suíte (~325 testes, ~20s)
+flutter test           # roda toda a suíte (~340 testes, ~20s)
 flutter run             # roda em device/emulador conectado
 flutter build apk --release   # gera o APK para instalar manualmente
+dart run tool/gen_audio_envelopes.dart   # após trocar/adicionar um .mp3 (precisa do ffmpeg)
+dart run tool/gen_azure_voice.dart <pasta> [nomes...]   # gera áudio com a voz Yara (ver "Boquinhas e áudios")
 ```
 
 O Flutter deste ambiente é o 3.44.9 (stable), instalado em
@@ -120,6 +122,13 @@ utils/         — helpers sem estado (hoje só responsividade).
   `_lipsClosed`, `_teethOnLip`...) e são compartilhadas por letras com a
   mesma articulação (P/B, F/V, S/Z, C/G/K/Q). A divisão alfabética foi
   escolha do usuário, não uma escala fonética.
+- `audio_envelopes.dart` — **gerado** por `tool/gen_audio_envelopes.dart`,
+  não edite à mão: o volume (0–100) de cada `.mp3` de `assets/audio/` a cada
+  10 ms. É o que sincroniza a boca com o som (ver "Boquinhas e áudios").
+- `lip_sync.dart` — `letterTrack(phase)` e `wordTrack(word)`: transformam o
+  volume do áudio numa `MouthTrack` (uma pose a cada 10 ms). `wordPoses()`
+  converte a grafia em sons com as regras de leitura do português ("qu",
+  "ch", "lh", "nh", "ç", "rr", "ss", "l"/"e"/"o" finais...).
 
 ### controllers/
 
@@ -144,6 +153,13 @@ controller conhecer widgets, e usam listas imutáveis
   (o teto da dificuldade) direto — por isso `game_data_test.dart` testa o
   comportamento real instanciando o controller em vez de recalcular a
   fórmula no teste.
+- `lip_sync_player.dart` — `LipSyncPlayer`: toca uma `MouthTrack` junto com
+  o áudio e expõe a `pose` a cada quadro. Não é regra de jogo, mas mora aqui
+  por ser um `ChangeNotifier` sem widgets. A boca anda num `Ticker` próprio
+  (suave) e o relógio é corrigido pela posição real do `VideoPlayerController`,
+  que o plugin só atualiza a cada 100 ms — seguir a posição direto deixaria
+  a boca aos trancos. O atraso do aparelho entre `play()` e o som sair é
+  aprendido a cada toque (`_latency`, static).
 - `game_controller.dart` — **não usado por nenhuma tela ativa**, só pela
   `alphabet_screen.dart` comentada. Faz parte do código morto.
 
@@ -197,14 +213,15 @@ controller em `initState`/`dispose`.
   duplique entre os dois layouts.
 - `letter_sounds_screen.dart` — tela do Sons das Letras, mesmo padrão de
   `difficulty`/`phaseIndex`/`pushReplacement`. **Sem controller em
-  `controllers/`**: não há regra de jogo, só tocar som e animação. A
-  boquinha é um `AnimationController` da tela + `mouthPoseAt(keyframes, t)`
-  desenhado por `MouthView` (foto deformada); o som é um `VideoPlayerController` do plugin
+  `controllers/`** de jogo: não há regra, só tocar som e mexer a boca. A
+  boquinha é o `LipSyncPlayer` tocando `letterTrack`/`wordTrack`, desenhada
+  por `MouthView` (foto deformada) — **a boca fala junto tanto o som da
+  letra quanto as palavras**. O som é um `VideoPlayerController` do plugin
   `video_player` (que toca áudio puro também — por isso não há plugin de
-  áudio separado). O som começa em `phase.soundAt` da animação, não no
-  instante zero, pra casar com a boca. Tudo que é mídia é conferido no
-  `AssetManifest` antes de abrir: letra sem áudio anima em silêncio, palavra
-  sem áudio não faz nada ao toque. Se existir `assets/videos/letters/<letra>
+  áudio separado). Os áudios das palavras são abertos já ao entrar na tela
+  (abrindo só no toque, o som saía atrasado). Tudo que é mídia é conferido
+  no `AssetManifest` antes de abrir: letra sem áudio anima em silêncio,
+  palavra sem áudio não faz nada ao toque. Se existir `assets/videos/letters/<letra>
   .mp4`, o vídeo gravado substitui a boquinha animada (falha ao abrir
   mostra "Não foi possível tocar o vídeo"). Letra e boca ficam sempre lado a
   lado em quadrados (`Center` + `AspectRatio(1)`); as palavras vão embaixo
@@ -309,19 +326,66 @@ lendo o código: renderize as poses num PNG (um `testWidgets` temporário
 com `tester.runAsync` — a foto só decodifica com I/O real — e
 `RepaintBoundary.toImage`) e olhe, inclusive ampliado.
 
+**Sincronia boca ↔ som.** A boca não anda num tempo fixo: é guiada pelo
+volume real de cada áudio (`data/audio_envelopes.dart`, gerado com o
+ffmpeg). Na letra, a boca chega na pose ~200 ms antes do som (320 ms nos
+que estouram), segura enquanto o som dura e fecha quando ele acaba; nos
+sons que estouram fica fechada até o estouro, inclusive durante o "mmm"
+grave que vem antes do B/D/G. Na palavra, cada som vira uma
+pose e as vogais são alinhadas aos picos de volume (as sílabas); se o nº de
+picos não bater com o de sílabas, espalha os sons por igual. Pra mudar o
+ritmo, mexa em `data/lip_sync.dart`; pra ver o resultado, renderize uma
+tira de quadros de `track.poseAt(...)` (como o PNG das poses).
+
 **Áudios.** Um arquivo por letra em `assets/audio/letters/` (`a.mp3` ...
-`z.mp3`, o **som** da letra) e, opcionalmente, um por palavra de exemplo em
+`z.mp3`, o **som** da letra) e um por palavra de exemplo em
 `assets/audio/words/` (`<id da palavra>.mp3`, ex. `abelha.mp3`). As pastas
 já estão no `pubspec.yaml`; o teste de dados falha se aparecer arquivo com
-nome fora da convenção. Os áudios foram recortados da série "Os sons das
-letras com boquinhas" do canal oficial do Método das Boquinhas (Renata
-Jardini), com permissão obtida pelo usuário **só para os áudios** — as
-imagens/vídeos de lá não entram no app. As palavras de exemplo também são
-as dos slides de lá (por isso têm áudio). K e Q reusam o áudio do C, Y o
-do I, W o do U; H não tem áudio; as palavras de H/K/Q/W/Y são nossas e
-não têm áudio. Os recortes foram feitos por medição de volume, sem ouvir —
-se um áudio estiver cortado errado, é só substituir o arquivo. O áudio da letra deve começar
-sem silêncio no início, senão atrasa em relação à boca.
+nome fora da convenção, e `lip_sync_test.dart` falha se um áudio não tiver
+curva de volume (rode o gerador). K e Q reusam o áudio do C, Y o do I, W o
+do U; H não tem áudio.
+
+**Todos os áudios (letras e palavras) são da voz feminina pt-BR
+`pt-BR-YaraNeural` da Azure**, escolhida pelo usuário, gerados uma vez por
+`tool/gen_azure_voice.dart` e gravados no app (o app não fala com a Azure
+nem usa TTS ao vivo). O som de cada letra é pedido em IPA (`<phoneme>`), sem
+vogal depois: "mmm", não "eme". O espectrograma confirmou que vem o som
+certo (zumbido no M, chiado no S, estouro no P), mas curto (~0,3 s mesmo a
+50% de velocidade), por isso `tool/treat_audio.sh` alonga os sons segurados
+sem mudar o tom. B/D/G já vêm com o vozeamento antes do estouro. P/T/C são
+só o estouro (0,1–0,23 s): pedir aspirado (`pʰ`) não muda nada. O usuário
+pediu fala **devagar, pra criança entender**: palavras a -40% de velocidade
+e letras alongadas pra ~1–1,5 s. Não acelere sem ele pedir. A boca segue o
+áudio, então fica lenta junto. Em IPA o G
+precisa ser o `g` comum: o `ɡ` (U+0261) volta um arquivo vazio.
+
+Pra refazer ou adicionar um áudio: defina `AZURE_SPEECH_KEY`/
+`AZURE_SPEECH_REGION` (recurso "Speech" do usuário, nível gratuito F0,
+500 mil caracteres/mês; o app inteiro gasta ~3 mil), rode `dart run
+tool/gen_azure_voice.dart <pasta> [nomes...]`, trate cada `.wav` com `bash
+tool/treat_audio.sh <wav> <mp3> [duração]` (as durações por letra estão no
+cabeçalho do script), copie pra `assets/audio/` e rode o gerador de curvas.
+Nunca escreva a chave em arquivo do repositório. Se a pronúncia de uma
+palavra sair errada, ponha a grafia falada em `_spoken` no gerador.
+
+Histórico das vozes: os primeiros áudios eram recortes da série "Os sons das
+letras com boquinhas" (Método das Boquinhas, Renata Jardini, com permissão
+só pros áudios; as palavras de exemplo vêm dos slides de lá), e as 15
+palavras de H/K/Q/W/Y que não existiam lá foram feitas com "Microsoft Maria"
+do Windows e depois com `pf_dora` do Kokoro, ambas rejeitadas pelo usuário.
+Ele pediu a voz da narradora, mas **não clonamos a voz de uma pessoa real**
+sem o consentimento dela; entre as vozes femininas pt-BR com uso permitido,
+a Yara era a de tom mais parecido (~211 Hz, igual à narradora), e o usuário
+preferiu trocar tudo por ela pra ter uma voz só no app. As gravações
+originais não estão mais no app.
+
+**Tratamento dos áudios (`tool/treat_audio.sh`).** Corta o silêncio do
+começo/fim (o áudio da letra deve começar já no som: silêncio no início
+atrasa o som em relação à boca), alonga até a duração alvo quando há uma,
+leva o volume médio a ~-14 dB com limitador pra não distorcer e grava mp3
+mono 44,1 kHz 96 kbps. Confira o resultado pelo espectrograma
+(`showspectrumpic` do ffmpeg, sem `drawtext`, que trava) — não dá pra ouvir
+daqui.
 
 **Vídeo gravado (opcional).** `assets/videos/letters/<letra>.mp4` (H.264 +
 AAC, só a boca, de frente, 1–2s) substitui a boquinha animada daquela
@@ -331,12 +395,19 @@ Histórico: uma primeira tentativa de boca desenhada + TTS foi descartada (o
 TTS do aparelho não produz o som isolado das letras e erra sílabas soltas;
 a boca não representava a fonética). Depois veio uma boca toda desenhada em
 código com áudio gravado, também descartada por parecer desenho; a atual
-(foto real deformada) foi escolha do usuário. Não volte pro TTS nem pra
-boca 100% desenhada.
+(foto real deformada) foi escolha do usuário. Não volte pro TTS ao vivo do
+aparelho nem pra boca 100% desenhada. Os áudios gerados uma vez com a Yara e
+gravados no app são outra coisa, e ficam.
 
 ## Testes
 
-Três arquivos em `test/`, todos relevantes — não pule a suíte:
+Quatro arquivos em `test/`, todos relevantes — não pule a suíte:
+
+- `lip_sync_test.dart` — toda curva de volume existe e corresponde a um
+  `.mp3` (gerador em dia), toda palavra tem áudio, trilhas de letra e
+  palavra começam/terminam em repouso, som segurado fica na pose da letra,
+  som que estoura fecha antes e solta depois, regras de leitura de
+  `wordPoses` ("qu", "lh", "ç", "rr", "l"/"e"/"o" finais).
 
 - `game_data_test.dart` — valida os **dados**: cada dificuldade tem o nº de
   fases esperado (`_expectedPhaseCounts`, hoje 8/8/7), nº certo de itens por

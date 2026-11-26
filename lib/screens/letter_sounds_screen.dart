@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../controllers/lip_sync_player.dart';
 import '../data/letter_phases.dart';
+import '../data/lip_sync.dart';
 import '../models/difficulty.dart';
 import '../models/mouth_pose.dart';
 import '../models/word_item.dart';
@@ -21,11 +23,12 @@ enum _MouthStatus { loading, mouth, video, error }
 /// Sons das Letras: a letra, a boquinha fazendo o som dela e palavras de
 /// exemplo que começam com a letra. O som toca sozinho ao abrir e de novo a
 /// cada toque (na letra, na boca ou em "Ouvir de novo"); tocar numa palavra
-/// fala a palavra.
+/// fala a palavra — com a boquinha falando junto.
 ///
-/// Não tem controller em controllers/: não há regra de jogo, só tocar som e
-/// animação — e quem toca é o VideoPlayerController do plugin (que também
-/// serve pra áudio puro, por isso não há um plugin de áudio separado).
+/// Não tem controller de jogo em controllers/: não há regra, só tocar som e
+/// mexer a boca. Quem toca é o VideoPlayerController do plugin (que também
+/// serve pra áudio puro, por isso não há um plugin de áudio separado), e
+/// quem mexe a boca no ritmo do áudio é o [LipSyncPlayer].
 class LetterSoundsScreen extends StatefulWidget {
   final Difficulty difficulty;
   final int phaseIndex;
@@ -42,20 +45,22 @@ class LetterSoundsScreen extends StatefulWidget {
 
 class _LetterSoundsScreenState extends State<LetterSoundsScreen>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _mouth = AnimationController(
-    vsync: this,
-    duration: kMouthAnimationDuration,
-  );
+  late final LipSyncPlayer _lipSync = LipSyncPlayer(this);
+
+  /// Trilhas da boca, calculadas uma vez: da letra e de cada palavra que
+  /// tem áudio.
+  late final MouthTrack _letterTrack = letterTrack(_phase);
+  late final Map<String, MouthTrack> _wordTracks = {
+    for (final word in _phase.words) word.id: ?wordTrack(word),
+  };
 
   /// Vídeo da boca (modo `video`) ou áudio da letra (modo `mouth`, pode ser
   /// nulo: sem arquivo de áudio a boquinha anima em silêncio).
   VideoPlayerController? _letterMedia;
 
-  /// Áudio da última palavra tocada.
-  VideoPlayerController? _wordAudio;
-
-  /// Espera entre o começo da animação e o começo do som (ver [_play]).
-  Timer? _soundTimer;
+  /// Áudio de cada palavra, aberto já ao entrar na tela: abrindo só no
+  /// toque, o som saía atrasado (e a boca não tinha como acompanhar).
+  final Map<String, VideoPlayerController> _wordAudio = {};
 
   Set<String> _assets = const {};
   _MouthStatus _status = _MouthStatus.loading;
@@ -79,22 +84,42 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
 
     if (_assets.contains(_phase.videoPath)) {
       final video = await _open(_phase.videoPath);
-      if (!mounted) return;
+      if (!mounted) {
+        unawaited(video?.dispose());
+        return;
+      }
       _letterMedia = video;
       setState(() => _status = video == null ? _MouthStatus.error : _MouthStatus.video);
     } else {
       if (_assets.contains(_phase.audioPath)) {
         final audio = await _open(_phase.audioPath);
-        if (!mounted) return;
+        if (!mounted) {
+          unawaited(audio?.dispose());
+          return;
+        }
         _letterMedia = audio;
       }
       setState(() => _status = _MouthStatus.mouth);
     }
+    unawaited(_loadWords());
 
     // Espera a transição de tela acabar: tocando com a tela ainda
     // deslizando, a criança perde o começo do som.
     await Future<void>.delayed(const Duration(milliseconds: 700));
     if (mounted) _play();
+  }
+
+  Future<void> _loadWords() async {
+    for (final word in _phase.words) {
+      final path = wordAudioPath(word);
+      if (!_assets.contains(path)) continue;
+      final audio = await _open(path);
+      if (!mounted) {
+        unawaited(audio?.dispose());
+        return;
+      }
+      if (audio != null) _wordAudio[word.id] = audio;
+    }
   }
 
   /// Abre um vídeo/áudio dos assets. Devolve null se não der (arquivo
@@ -103,6 +128,9 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
     final controller = VideoPlayerController.asset(path);
     try {
       await controller.initialize();
+      // Volume no máximo do player: o volume em si vem do arquivo, que já
+      // é normalizado (ver AGENTS.md).
+      await controller.setVolume(1);
       return controller;
     } catch (error) {
       debugPrint('LetterSoundsScreen: falha ao abrir $path ($error)');
@@ -111,50 +139,47 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
     }
   }
 
-  // Sempre do começo: um toque no meio do som recomeça em vez de pausar.
-  void _restart(VideoPlayerController? media) {
-    if (media == null) return;
-    unawaited(media.seekTo(Duration.zero).then((_) => media.play()));
-  }
-
   void _play() {
     switch (_status) {
       case _MouthStatus.video:
-        _restart(_letterMedia);
+        _lipSync.stop();
+        _pauseWords();
+        final video = _letterMedia;
+        // Sempre do começo: um toque no meio recomeça em vez de pausar.
+        if (video != null) unawaited(video.seekTo(Duration.zero).then((_) => video.play()));
       case _MouthStatus.mouth:
-        _mouth.forward(from: 0);
-        // O som começa quando a boca chega na posição dele, não quando ela
-        // ainda está saindo do repouso (nos sons que estouram, "p"/"t"/"c",
-        // isso é só no fim do fechamento).
-        _soundTimer?.cancel();
-        _soundTimer = Timer(
-          kMouthAnimationDuration * _phase.soundAt,
-          () => _restart(_letterMedia),
-        );
+        _pauseWords();
+        _lipSync.play(_letterTrack, _letterMedia);
       case _MouthStatus.loading || _MouthStatus.error:
         break;
     }
   }
 
-  Future<void> _playWord(WordItem word) async {
-    final path = wordAudioPath(word);
-    if (!_assets.contains(path)) return;
-    final audio = await _open(path);
-    if (!mounted) {
-      unawaited(audio?.dispose());
+  void _playWord(WordItem word) {
+    final track = _wordTracks[word.id];
+    final audio = _wordAudio[word.id];
+    if (track == null || (audio == null && _assets.contains(wordAudioPath(word)))) {
+      // Sem áudio (ou ainda abrindo): não mexe a boca à toa.
       return;
     }
-    unawaited(_wordAudio?.dispose());
-    _wordAudio = audio;
-    _restart(audio);
+    if (_status == _MouthStatus.video) unawaited(_letterMedia?.pause());
+    _pauseWords();
+    _lipSync.play(track, audio);
+  }
+
+  void _pauseWords() {
+    for (final audio in _wordAudio.values) {
+      if (audio.value.isPlaying) unawaited(audio.pause());
+    }
   }
 
   @override
   void dispose() {
-    _soundTimer?.cancel();
-    _mouth.dispose();
+    _lipSync.dispose();
     _letterMedia?.dispose();
-    _wordAudio?.dispose();
+    for (final audio in _wordAudio.values) {
+      audio.dispose();
+    }
     super.dispose();
   }
 
@@ -303,14 +328,13 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
   }
 
   Widget _buildDrawnMouth() {
-    final keyframes = _phase.keyframes;
     final note = _phase.note;
     return Stack(
       fit: StackFit.expand,
       children: [
-        AnimatedBuilder(
-          animation: _mouth,
-          builder: (_, _) => MouthView(pose: mouthPoseAt(keyframes, _mouth.value)),
+        ListenableBuilder(
+          listenable: _lipSync,
+          builder: (_, _) => MouthView(pose: _lipSync.pose),
         ),
         if (note != null)
           Align(

@@ -56,6 +56,49 @@ class MouthPose {
   );
 }
 
+/// Média de várias poses, campo a campo. Serve pra suavizar uma
+/// sequência de poses (média móvel), tirando tremidos quadro a quadro.
+MouthPose meanPose(List<MouthPose> poses) {
+  double avg(double Function(MouthPose p) field) =>
+      poses.fold(0.0, (sum, p) => sum + field(p)) / poses.length;
+  return MouthPose(
+    lips: avg((p) => p.lips),
+    jaw: avg((p) => p.jaw),
+    width: avg((p) => p.width),
+    round: avg((p) => p.round),
+    press: avg((p) => p.press),
+    bite: avg((p) => p.bite),
+    tongueTip: avg((p) => p.tongueTip),
+    tongueBack: avg((p) => p.tongueBack),
+  );
+}
+
+/// A boca quadro a quadro durante um som: uma pose a cada [stepMs] ms,
+/// calculada a partir do volume do áudio (ver data/lip_sync.dart). O áudio
+/// começa a tocar em [soundStart]; antes disso a boca já vai se preparando,
+/// como numa boca de verdade.
+class MouthTrack {
+  static const stepMs = 10;
+
+  final List<MouthPose> frames;
+  final Duration soundStart;
+
+  const MouthTrack(this.frames, {required this.soundStart});
+
+  Duration get duration => Duration(milliseconds: frames.length * stepMs);
+
+  /// Pose no instante [t] da trilha, interpolando entre os dois quadros
+  /// vizinhos (a tela desenha a 60+ fps, mais rápido que um quadro a cada
+  /// 10 ms).
+  MouthPose poseAt(Duration t) {
+    final x = t.inMicroseconds / 1000 / stepMs;
+    if (x <= 0) return frames.first;
+    if (x >= frames.length - 1) return frames.last;
+    final i = x.floor();
+    return MouthPose.lerp(frames[i], frames[i + 1], x - i);
+  }
+}
+
 /// Um ponto da animação: em [at] (fração 0–1 da duração) a boca está em
 /// [pose].
 class MouthKeyframe {
