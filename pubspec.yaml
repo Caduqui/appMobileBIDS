@@ -27,7 +27,6 @@ flutter:
 
   assets:
     - assets/fruits/
-    - assets/cards/
     - assets/images/background/
     # Sons das Letras: foto real da boca, deformada pra cada som. Ver AGENTS.md.
     - assets/images/mouth/

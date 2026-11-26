@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/memory_card_model.dart';
+import 'memory_card_back.dart';
 import 'word_image.dart';
 
 class MemoryCardWidget extends StatefulWidget {
@@ -151,7 +152,7 @@ class _MemoryCardWidgetState extends State<MemoryCardWidget>
     );
   }
 
-  /// Verso do card com a arte "Memória Divertida".
+  /// Verso do card: a capivara mascote (ver [MemoryCardBack]).
   Widget _buildBack() {
     return Container(
       margin: const EdgeInsets.all(1),
@@ -162,7 +163,7 @@ class _MemoryCardWidgetState extends State<MemoryCardWidget>
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Image.asset('assets/cards/back_card.png', fit: BoxFit.cover),
+      child: const MemoryCardBack(),
     );
   }
 }

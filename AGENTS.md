@@ -235,7 +235,10 @@ controller em `initState`/`dispose`.
 
 - `memory_card_widget.dart` — flip 3D (`Transform`+`rotateY`) com shake em
   erro. Frente mostra `WordImage` + nome (em `FittedBox` pra nomes longos tipo
-  "Helicóptero" não estourarem a largura do card).
+  "Helicóptero" não estourarem a largura do card). O verso é o
+  `MemoryCardBack` (`memory_card_back.dart`): a capivara mascote num medalhão
+  branco sobre o azul do card da memória, desenhada em código e medida pelo
+  lado menor da carta, porque a proporção da carta muda com a grade.
 - `celebration_overlay.dart` / `shake_widget.dart` — mesmo padrão:
   `triggerKey` é um `int` incremental (não um `bool`), porque um bool não
   dispara a animação de novo se o valor continuar `true` entre dois acertos
@@ -479,11 +482,7 @@ deliberada deixá-los como referência futura.
   (pacote antigo) e `.../com/example/linguagens/MainActivity.kt` (pacote
   atual, usado pelo `applicationId` em `android/app/build.gradle.kts`). O
   primeiro é resto de um rename do projeto; não afeta o build mas é lixo.
-- **`assets/cards/completePalavra.jpg`** não é mais usado por nenhuma tela
-  (era a arte antiga do card do Complete a Palavra), mas ainda vai no APK
-  porque a pasta está declarada. `back_card.png`, na mesma pasta, continua em
-  uso: é o verso das cartas dentro do Jogo da Memória.
-- **`pubspec.yaml` `assets:`** lista `assets/fruits/`, `assets/cards/`, `assets/images/mouth/` e
+- **`pubspec.yaml` `assets:`** lista `assets/fruits/`, `assets/images/mouth/` e
   `assets/images/background/`, mas não `assets/images/letters/` (código
   morto, ok) nem arquivos individuais fora dessas pastas — se adicionar uma
   pasta de assets nova, lembre de declará-la aqui.
