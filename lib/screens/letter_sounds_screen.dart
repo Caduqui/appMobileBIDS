@@ -14,7 +14,7 @@ import '../widgets/word_image.dart';
 import 'difficulty_screen.dart';
 
 /// O que aparece no card da boca.
-/// - `mouth`: a boquinha desenhada, animada (o caso normal).
+/// - `mouth`: a boquinha animada — foto real deformada (o caso normal).
 /// - `video`: existe um vídeo gravado pra letra; ele substitui o desenho.
 enum _MouthStatus { loading, mouth, video, error }
 

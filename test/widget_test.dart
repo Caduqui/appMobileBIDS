@@ -328,7 +328,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
-  testWidgets('sons das letras: sem vídeo gravado mostra a boquinha desenhada e as palavras', (tester) async {
+  testWidgets('sons das letras: sem vídeo gravado mostra a boquinha animada e as palavras', (tester) async {
     _usePhoneScreen(tester);
     // "W" é a letra com menos chance de um dia ganhar vídeo gravado; se
     // ganhar, este teste é que precisa trocar de letra.

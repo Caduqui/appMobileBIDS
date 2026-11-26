@@ -7,6 +7,7 @@ import 'package:linguagens/data/letter_phases.dart';
 import 'package:linguagens/data/memory_phases.dart';
 import 'package:linguagens/models/difficulty.dart';
 import 'package:linguagens/models/mouth_pose.dart';
+import 'package:linguagens/widgets/mouth_view.dart';
 
 /// Fácil e Médio têm 8 fases (5 originais + Higiene, Emoções, Transportes);
 /// Difícil tem só 7 porque "Transportes" já existia lá e não duplicamos.
@@ -163,6 +164,13 @@ void main() {
           }
         }
       }
+    });
+
+    test('foto da boquinha existe e está declarada no pubspec', () {
+      // Os pontos dos lábios em mouth_view.dart foram marcados nesta foto
+      // (3287x2191): trocar o arquivo exige marcar de novo.
+      expect(File(kMouthPhotoPath).existsSync(), isTrue, reason: kMouthPhotoPath);
+      expect(File('pubspec.yaml').readAsStringSync(), contains('- assets/images/mouth/'));
     });
 
     test('pastas de áudio existem e estão declaradas no pubspec', () {

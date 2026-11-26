@@ -37,11 +37,11 @@ class LetterPhase {
   String get title => 'Letra $letter';
 
   /// Vídeo gravado de uma boca real (som + boca juntos). Opcional: se o
-  /// arquivo existir, a tela toca ele no lugar da boquinha desenhada.
+  /// arquivo existir, a tela toca ele no lugar da boquinha animada.
   /// Convenção de nome: a letra minúscula, ex. `assets/videos/letters/b.mp4`.
   String get videoPath => 'assets/videos/letters/${letter.toLowerCase()}.mp4';
 
-  /// Áudio do som da letra, tocado junto com a boquinha desenhada. Se o
+  /// Áudio do som da letra, tocado junto com a boquinha animada. Se o
   /// arquivo não existir, a boquinha anima em silêncio.
   String get audioPath => 'assets/audio/letters/${letter.toLowerCase()}.mp3';
 
