@@ -9,6 +9,7 @@ import 'package:linguagens/screens/completion_game_screen.dart';
 import 'package:linguagens/screens/letter_sounds_screen.dart';
 import 'package:linguagens/models/mouth_pose.dart';
 import 'package:linguagens/screens/memory_game_screen.dart';
+import 'package:linguagens/widgets/minigame_art.dart';
 import 'package:linguagens/widgets/mouth_view.dart';
 
 // Tamanhos físicos a devicePixelRatio 3.0 (ver _useDevice). O app agora
@@ -104,21 +105,21 @@ void main() {
         (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == name,
       );
 
-  testWidgets('cards dos jogos: centralizados e com a proporção da imagem (sem corte)', (tester) async {
+  testWidgets('cards dos jogos: centralizados e com a proporção da arte (sem corte)', (tester) async {
     _usePhoneScreen(tester);
     await tester.pumpWidget(const MemoryGameApp());
     await tester.tap(find.text('Iniciar'));
     await tester.pumpAndSettle();
 
     const screenWidth = 360.0;
-    final cards = {
-      'assets/cards/back_card.png': 1011 / 1432,
-      'assets/cards/completePalavra.jpg': 1251 / 1886,
-    };
-    for (final entry in cards.entries) {
-      final rect = tester.getRect(assetImage(entry.key));
-      expect(rect.width / rect.height, closeTo(entry.value, 0.01), reason: entry.key);
-      expect(rect.center.dx, closeTo(screenWidth / 2, 1), reason: '${entry.key} descentralizado');
+    // No celular em pé cabe 1 card por linha, então todos ficam no centro.
+    for (final kind in MinigameArtKind.values) {
+      final art = find.byWidgetPredicate((w) => w is MinigameArt && w.kind == kind);
+      await tester.ensureVisible(art);
+      await tester.pumpAndSettle();
+      final rect = tester.getRect(art);
+      expect(rect.width / rect.height, closeTo(MinigameArt.aspectRatio, 0.01), reason: '$kind');
+      expect(rect.center.dx, closeTo(screenWidth / 2, 1), reason: '$kind descentralizado');
     }
     expect(find.text('Complete a Palavra'), findsOneWidget);
   });

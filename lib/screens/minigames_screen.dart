@@ -4,6 +4,7 @@ import '../data/completion_phases.dart';
 import '../data/letter_phases.dart';
 import '../data/memory_phases.dart';
 import '../utils/responsive.dart';
+import '../widgets/minigame_art.dart';
 import 'completion_game_screen.dart';
 import 'difficulty_screen.dart';
 import 'letter_sounds_screen.dart';
@@ -44,8 +45,7 @@ class MinigamesScreen extends StatelessWidget {
                   children: [
                     _MinigameCard(
                       title: _memoryTitle,
-                      imagePath: 'assets/cards/back_card.png',
-                      imageSize: const Size(1011, 1432),
+                      art: MinigameArtKind.memory,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -67,8 +67,7 @@ class MinigamesScreen extends StatelessWidget {
                     ),
                     _MinigameCard(
                       title: _completionTitle,
-                      imagePath: 'assets/cards/completePalavra.jpg',
-                      imageSize: const Size(1251, 1886),
+                      art: MinigameArtKind.completion,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -91,25 +90,7 @@ class MinigamesScreen extends StatelessWidget {
                     ),
                     _MinigameCard(
                       title: _letterSoundsTitle,
-                      // Sem arte própria ainda: "Aa" desenhado, na mesma
-                      // proporção do card da memória pra os cards ficarem
-                      // do mesmo tamanho.
-                      art: const ColoredBox(
-                        color: Colors.teal,
-                        child: FittedBox(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Text(
-                              'Aa',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      imageSize: const Size(1011, 1432),
+                      art: MinigameArtKind.letterSounds,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -143,29 +124,22 @@ class MinigamesScreen extends StatelessWidget {
 
 class _MinigameCard extends StatelessWidget {
   final String title;
-
-  /// Arte do card: um arquivo ([imagePath]) ou, pra jogo sem arte própria,
-  /// um widget desenhado ([art]). Um dos dois é obrigatório.
-  final String? imagePath;
-  final Widget? art;
-
-  /// Tamanho em pixels do arquivo da imagem. Só a proporção importa: a
-  /// miniatura usa a mesma, então nada da arte é cortado.
-  final Size imageSize;
+  final MinigameArtKind art;
   final VoidCallback onTap;
 
   const _MinigameCard({
     required this.title,
-    this.imagePath,
-    this.art,
-    required this.imageSize,
+    required this.art,
     required this.onTap,
-  }) : assert(imagePath != null || art != null);
+  });
 
   @override
   Widget build(BuildContext context) {
     final width = responsiveValue(context, phone: 180.0, tablet: 260.0);
     final fontSize = responsiveValue(context, phone: 16.0, tablet: 20.0);
+    // Mesmo arredondamento que a arte usa no próprio desenho (30 de 300),
+    // pra borda clara de dentro acompanhar a borda do card.
+    final radius = BorderRadius.circular(width * 0.1);
 
     return GestureDetector(
       onTap: onTap,
@@ -173,13 +147,19 @@ class _MinigameCard extends StatelessWidget {
         width: width,
         child: Column(
           children: [
-            AspectRatio(
-              aspectRatio: imageSize.width / imageSize.height,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child:
-                    art ?? Image.asset(imagePath!, fit: BoxFit.cover),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x29000000),
+                    blurRadius: 16,
+                    offset: Offset(0, 8),
+                    spreadRadius: -4,
+                  ),
+                ],
               ),
+              child: ClipRRect(borderRadius: radius, child: MinigameArt(art)),
             ),
             const SizedBox(height: 8),
             Text(

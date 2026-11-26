@@ -179,9 +179,11 @@ controller em `initState`/`dispose`.
   (só funciona no Android; no iOS o sistema não deixa um app se fechar
   sozinho).
 - `minigames_screen.dart` — lista os minigames como cards (`_MinigameCard`).
-  Cada card usa `AspectRatio` com a proporção real do arquivo de imagem (não
-  um quadrado cortado) — ver "Convenção de imagens" abaixo. Largura do card e
-  fonte do título escalam em tablet via `responsiveValue`.
+  A arte de cada card é a `MinigameArt` (ver `widgets/`), desenhada em
+  código, em retrato 3:4; o título fica embaixo, em texto do Flutter (não
+  dentro da arte). Largura do card e fonte do título escalam em tablet via
+  `responsiveValue`; o arredondamento do card é 10% da largura, o mesmo que
+  a arte usa no próprio desenho.
 - `difficulty_screen.dart` e `phases_screen.dart` — genéricas, servem pra
   qualquer minigame. Recebem `gameTitle`, `phaseTitlesFor` (função
   `Difficulty → List<String>`) e `gameBuilder` (função `(Difficulty, int) →
@@ -227,9 +229,7 @@ controller em `initState`/`dispose`.
   lado em quadrados (`Center` + `AspectRatio(1)`); as palavras vão embaixo
   em retrato e numa terceira coluna em paisagem. Toca sozinho 700ms depois
   de abrir (fim da transição de tela) e de novo, do começo, a cada toque na
-  letra, na boca ou em "Ouvir de novo". O card dessa tela em
-  `minigames_screen.dart` usa um "Aa" desenhado (`art:`) por não ter arte
-  própria ainda.
+  letra, na boca ou em "Ouvir de novo".
 
 ### widgets/
 
@@ -243,6 +243,22 @@ controller em `initState`/`dispose`.
 - `word_image.dart` — `WordImage`: desenha `item.imagePath` se existir, senão
   o `item.emoji` em `FittedBox`. É o único lugar que decide PNG-vs-emoji —
   outras telas nunca devem checar `imagePath`/`emoji` diretamente.
+- `minigame_art.dart` — `MinigameArt`: arte dos cards da escolha de jogo,
+  desenhada em código num quadro de 300x400 e escalada. Um mascote só, uma
+  **capivara** com uma mexerica na cabeça (`capybara_drawing.dart`,
+  `CapybaraDrawing`), atrás de um balcão de madeira mexendo nos objetos de
+  cada jogo: cartas na Memória, letra na boca pra encaixar em G _ T O no
+  Complete a Palavra, cantando com balão "A" nos Sons. Fundo chapado clarinho
+  e borda na cor do jogo (azul, verde, roxo). O estilo veio de uma imagem de
+  exemplo que o usuário mandou: desenho chapado com contorno marrom,
+  capivara de perfil com focinho comprido, olho fechadinho feliz. Foi a
+  terceira tentativa, e as duas anteriores foram rejeitadas: capivara em pé
+  em 3D suave num fundo de degradê azul ("básica", "fundo genérico"), e
+  depois uma com olhos grandes de íris, cílios e dentes, que ele achou
+  **assustadora**. Não volte pra nenhuma das duas. Pra ver uma mudança,
+  renderize a tela num PNG (`testWidgets` temporário +
+  `RepaintBoundary.toImage`, carregando a Roboto do SDK com
+  `FontLoader('Roboto')`, senão as letras saem como quadrados).
 - `trace_layer.dart` / `draw_painter.dart` — só usados pela
   `alphabet_screen.dart` comentada. Código morto.
 
@@ -289,7 +305,8 @@ dart` e `completion_game_screen.dart`.
 - **Imagens de card/thumbnail:** nunca usar `BoxFit.cover` num quadrado fixo
   pra arte que não é quadrada — corta título/personagem. Em vez disso, usar
   `AspectRatio(aspectRatio: larguraPx / alturaPx)` com a proporção real do
-  arquivo (ver `_MinigameCard` em `minigames_screen.dart`).
+  arquivo. Arte desenhada em código segue a mesma ideia: um `AspectRatio`
+  fixo dentro do próprio widget (ver `MinigameArt.aspectRatio`).
 - **Timers em controllers:** todo `Future.delayed` que mexe em estado precisa
   de uma guarda contra "a tela/controller já não existe mais" — copie o
   padrão `_disposed` + `_round` de `memory_game_controller.dart` em vez de só
@@ -462,6 +479,10 @@ deliberada deixá-los como referência futura.
   (pacote antigo) e `.../com/example/linguagens/MainActivity.kt` (pacote
   atual, usado pelo `applicationId` em `android/app/build.gradle.kts`). O
   primeiro é resto de um rename do projeto; não afeta o build mas é lixo.
+- **`assets/cards/completePalavra.jpg`** não é mais usado por nenhuma tela
+  (era a arte antiga do card do Complete a Palavra), mas ainda vai no APK
+  porque a pasta está declarada. `back_card.png`, na mesma pasta, continua em
+  uso: é o verso das cartas dentro do Jogo da Memória.
 - **`pubspec.yaml` `assets:`** lista `assets/fruits/`, `assets/cards/`, `assets/images/mouth/` e
   `assets/images/background/`, mas não `assets/images/letters/` (código
   morto, ok) nem arquivos individuais fora dessas pastas — se adicionar uma
