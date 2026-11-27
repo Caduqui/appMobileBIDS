@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
+import '../audio/game_audio.dart';
+import '../audio/voice_clips.dart';
 import '../controllers/completion_game_controller.dart';
 import '../data/completion_phases.dart';
 import '../models/completion_models.dart';
 import '../models/difficulty.dart';
+import '../models/word_item.dart';
 import '../utils/responsive.dart';
+import '../widgets/background_music.dart';
 import '../widgets/celebration_overlay.dart';
 import '../widgets/shake_widget.dart';
 import '../widgets/word_image.dart';
@@ -25,9 +32,23 @@ class CompletionGameScreen extends StatefulWidget {
 }
 
 class _CompletionGameScreenState extends State<CompletionGameScreen> {
+  /// Quanto tempo a letra errada fica vermelha: o tremido (400 ms) e mais
+  /// um pouquinho pra criança ver qual foi.
+  static const _wrongDuration = Duration(milliseconds: 700);
+
   late final CompletionGameController _controller;
+  final _random = Random();
   int _celebrateKey = 0;
-  int _wrongKey = 0;
+
+  /// A última letra tocada na bandeja: o controller só avisa "acertou" /
+  /// "errou", e a tela precisa saber qual letra falar ou deixar vermelha.
+  LetterTile? _tappedTile;
+
+  /// Letra errada (vermelha e tremendo) e o contador do tremido por letra:
+  /// um contador por letra porque o ShakeWidget treme quando o número muda.
+  int? _wrongTileId;
+  final Map<int, int> _shakeKeys = {};
+  Timer? _wrongTimer;
 
   List<CompletionPhase> get _phases => kCompletionPhases[widget.difficulty]!;
   CompletionPhase get _phase => _phases[widget.phaseIndex];
@@ -40,9 +61,67 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
       words: _phase.words,
       missingLetters: widget.difficulty.missingLetters,
     );
-    _controller.onWrongLetter = () => setState(() => _wrongKey++);
-    _controller.onWordSolved = () => setState(() => _celebrateKey++);
+    _controller.onWrongLetter = _onWrongLetter;
+    _controller.onLetterPlaced = () {
+      // A voz fala o nome da letra certa ("eme"). A última letra da palavra
+      // não: ali quem fala é a palavra inteira (onWordSolved).
+      final tile = _tappedTile;
+      if (tile != null) {
+        unawaited(GameAudio.instance.say([letterNameClip(tile.letter)]));
+      }
+    };
+    _controller.onWordSolved = () {
+      setState(() => _celebrateKey++);
+      unawaited(_celebrate(_controller.currentWord));
+    };
     _controller.addListener(_onControllerChanged);
+    _controller.startPhase();
+
+    // Abre as falas já: abrindo só no toque, o nome da letra sairia atrasado.
+    GameAudio.instance.preload([
+      for (final word in _phase.words) wordClip(word),
+      for (final letter in 'abcdefghijklmnopqrstuvwxyz'.split(''))
+        letterNameClip(letter),
+      ...cheerClips,
+    ]);
+  }
+
+  /// "Melão" … "Parabéns!" e a vinheta de vitória. Se a criança já passou
+  /// pra próxima palavra no meio (a fala foi cortada), não toca o resto.
+  Future<void> _celebrate(WordItem word) async {
+    final cheer = cheerClips[_random.nextInt(cheerClips.length)];
+    final finished = await GameAudio.instance.say([wordClip(word), cheer]);
+    if (finished && mounted) GameAudio.instance.play(Sfx.win);
+  }
+
+  void _onWrongLetter() {
+    final tile = _tappedTile;
+    if (tile == null) return;
+    GameAudio.instance.play(Sfx.wrong);
+    _wrongTimer?.cancel();
+    setState(() {
+      _wrongTileId = tile.id;
+      _shakeKeys[tile.id] = (_shakeKeys[tile.id] ?? 0) + 1;
+    });
+    _wrongTimer = Timer(_wrongDuration, () {
+      if (mounted) setState(() => _wrongTileId = null);
+    });
+  }
+
+  void _onTileTap(LetterTile tile) {
+    _tappedTile = tile;
+    _controller.onTileTap(tile);
+  }
+
+  /// Próxima palavra / jogar de novo: corta a comemoração que ainda estiver
+  /// falando, senão ela atropelaria a palavra nova.
+  void _nextWord() {
+    GameAudio.instance.stopVoice();
+    _controller.nextWord();
+  }
+
+  void _playAgain() {
+    GameAudio.instance.stopVoice();
     _controller.startPhase();
   }
 
@@ -50,6 +129,9 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
 
   @override
   void dispose() {
+    _wrongTimer?.cancel();
+    // Na hora: a tela está saindo e não pode deixar timer de música.
+    GameAudio.instance.stopVoice(now: true);
     _controller.removeListener(_onControllerChanged);
     _controller.dispose();
     super.dispose();
@@ -70,23 +152,26 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
   Widget build(BuildContext context) {
     final status = _controller.status;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF8E7),
-      appBar: AppBar(
-        title: Text(
-          '${widget.difficulty.label} · Fase ${widget.phaseIndex + 1} — ${_phase.title}',
-          style: const TextStyle(fontSize: 18),
-          overflow: TextOverflow.ellipsis,
+    return BackgroundMusic(
+      track: MusicTrack.game,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFF8E7),
+        appBar: AppBar(
+          title: Text(
+            '${widget.difficulty.label} · Fase ${widget.phaseIndex + 1} — ${_phase.title}',
+            style: const TextStyle(fontSize: 18),
+            overflow: TextOverflow.ellipsis,
+          ),
+          backgroundColor: difficultyColor(widget.difficulty),
+          foregroundColor: Colors.white,
         ),
-        backgroundColor: difficultyColor(widget.difficulty),
-        foregroundColor: Colors.white,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: isLandscape(context)
-              ? _buildLandscape(status)
-              : _buildPortrait(status),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: isLandscape(context)
+                ? _buildLandscape(status)
+                : _buildPortrait(status),
+          ),
         ),
       ),
     );
@@ -101,7 +186,7 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
         const SizedBox(height: 8),
         Expanded(child: _buildWordCard()),
         const SizedBox(height: 20),
-        ShakeWidget(triggerKey: _wrongKey, child: _buildSlots()),
+        _buildSlots(),
         const SizedBox(height: 20),
         _buildTiles(),
         const SizedBox(height: 16),
@@ -138,10 +223,7 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
                       children: [
                         _buildProgressText(),
                         const SizedBox(height: 12),
-                        ShakeWidget(
-                          triggerKey: _wrongKey,
-                          child: _buildSlots(),
-                        ),
+                        _buildSlots(),
                         const SizedBox(height: 12),
                         _buildTiles(),
                         const SizedBox(height: 12),
@@ -242,9 +324,14 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
             maintainSize: true,
             maintainAnimation: true,
             maintainState: true,
-            child: _TileButton(
-              letter: tile.letter,
-              onTap: () => _controller.onTileTap(tile),
+            // Letra errada: fica vermelha e treme na horizontal, só ela.
+            child: ShakeWidget(
+              triggerKey: _shakeKeys[tile.id] ?? 0,
+              child: _TileButton(
+                letter: tile.letter,
+                wrong: tile.id == _wrongTileId,
+                onTap: () => _onTileTap(tile),
+              ),
             ),
           ),
       ],
@@ -263,7 +350,7 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
             icon: Icons.arrow_forward,
             label: 'Próxima palavra',
             color: Colors.orange,
-            onPressed: _controller.nextWord,
+            onPressed: _nextWord,
           ),
         ),
         CompletionStatus.phaseCompleted => Wrap(
@@ -274,7 +361,7 @@ class _CompletionGameScreenState extends State<CompletionGameScreen> {
               icon: Icons.replay,
               label: 'Jogar novamente',
               color: Colors.teal,
-              onPressed: _controller.startPhase,
+              onPressed: _playAgain,
             ),
             if (_hasNextPhase)
               _FooterButton(
@@ -348,9 +435,16 @@ class _SlotBox extends StatelessWidget {
 
 class _TileButton extends StatelessWidget {
   final String letter;
+
+  /// Acabou de ser tocada e não era a letra certa: fundo vermelho.
+  final bool wrong;
   final VoidCallback onTap;
 
-  const _TileButton({required this.letter, required this.onTap});
+  const _TileButton({
+    required this.letter,
+    required this.wrong,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -359,12 +453,13 @@ class _TileButton extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         width: size,
         height: size,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.teal,
+          color: wrong ? Colors.red : Colors.teal,
           borderRadius: BorderRadius.circular(12),
           boxShadow: const [
             BoxShadow(
@@ -405,7 +500,10 @@ class _FooterButton extends StatelessWidget {
     final fontSize = responsiveValue(context, phone: 14.0, tablet: 18.0);
 
     return ElevatedButton.icon(
-      onPressed: onPressed,
+      onPressed: () {
+        GameAudio.instance.play(Sfx.tap);
+        onPressed();
+      },
       icon: Icon(icon),
       label: Text(label),
       style: ElevatedButton.styleFrom(

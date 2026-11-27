@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../audio/game_audio.dart';
 import '../models/difficulty.dart';
 import '../utils/responsive.dart';
+import '../widgets/background_music.dart';
 import 'phases_screen.dart';
 
 Color difficultyColor(Difficulty difficulty) => switch (difficulty) {
@@ -27,51 +29,54 @@ class DifficultyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF8E7),
-      appBar: AppBar(
-        title: Text(gameTitle),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-      ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Escolha a dificuldade',
-                  style: TextStyle(
-                    fontSize: responsiveValue(
-                      context,
-                      phone: 22.0,
-                      tablet: 28.0,
+    return BackgroundMusic(
+      track: MusicTrack.menu,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFF8E7),
+        appBar: AppBar(
+          title: Text(gameTitle),
+          backgroundColor: Colors.teal,
+          foregroundColor: Colors.white,
+        ),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Escolha a dificuldade',
+                    style: TextStyle(
+                      fontSize: responsiveValue(
+                        context,
+                        phone: 22.0,
+                        tablet: 28.0,
+                      ),
+                      fontWeight: FontWeight.bold,
                     ),
-                    fontWeight: FontWeight.bold,
                   ),
-                ),
-                const SizedBox(height: 24),
-                for (final difficulty in Difficulty.values) ...[
-                  _DifficultyButton(
-                    difficulty: difficulty,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => PhasesScreen(
-                            gameTitle: gameTitle,
-                            difficulty: difficulty,
-                            phaseTitles: phaseTitlesFor(difficulty),
-                            gameBuilder: gameBuilder,
+                  const SizedBox(height: 24),
+                  for (final difficulty in Difficulty.values) ...[
+                    _DifficultyButton(
+                      difficulty: difficulty,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PhasesScreen(
+                              gameTitle: gameTitle,
+                              difficulty: difficulty,
+                              phaseTitles: phaseTitlesFor(difficulty),
+                              gameBuilder: gameBuilder,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -93,7 +98,10 @@ class _DifficultyButton extends StatelessWidget {
     final fontSize = responsiveValue(context, phone: 24.0, tablet: 30.0);
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        GameAudio.instance.play(Sfx.tap);
+        onTap();
+      },
       child: Container(
         width: width,
         height: height,

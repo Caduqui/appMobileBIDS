@@ -39,6 +39,10 @@ class CompletionGameController extends ChangeNotifier {
   VoidCallback? onWrongLetter;
   VoidCallback? onWordSolved;
 
+  /// Letra certa encaixou e a palavra ainda não acabou (quando acaba, quem
+  /// avisa é só o [onWordSolved], pra não tocar dois sons juntos).
+  VoidCallback? onLetterPlaced;
+
   int get wordCount => _words.length;
   WordItem get currentWord => _words[wordIndex];
   bool get isLastWord => wordIndex == _words.length - 1;
@@ -144,6 +148,8 @@ class CompletionGameController extends ChangeNotifier {
           ? CompletionStatus.phaseCompleted
           : CompletionStatus.wordSolved;
       onWordSolved?.call();
+    } else {
+      onLetterPlaced?.call();
     }
     notifyListeners();
   }

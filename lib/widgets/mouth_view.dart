@@ -119,6 +119,105 @@ double _seamY(double x) {
 
 final _seamCenterY = _seamY(_centerX);
 
+/// Malha da língua: linhas do assoalho da boca até a raiz (passando pela
+/// ponta), colunas de uma borda à outra.
+const _tongueRows = 64;
+const _tongueColumns = 48;
+
+/// Distância da "câmera" até os dentes: dá a perspectiva — o que está no
+/// fundo da boca encolhe em direção ao meio.
+const _cameraDistance = 4.0 * _halfWidth;
+
+double _sq(double x) => x * x;
+
+/// Um milímetro em pixels da foto: a boca (de canto a canto, 2 *
+/// [_halfWidth]) tem uns 50 mm.
+const _mm = _halfWidth / 25;
+
+/// Formato de um dente visto de frente, em milímetros (medidas médias de
+/// dentes permanentes).
+class _Tooth {
+  final double width;
+  final double length;
+
+  /// Quanto a borda fica mais alta (nos de cima) ou mais baixa (nos de
+  /// baixo) que a dos incisivos centrais: o lateral de cima é mais curto.
+  final double shorter;
+
+  /// Quanto a borda é translúcida (bem mais nos incisivos).
+  final double translucent;
+
+  /// Arredondamento dos cantos da borda, do lado do meio da boca e do
+  /// lado de fora (fração da meia largura). O de fora é mais redondo.
+  final double mesialRound;
+  final double distalRound;
+
+  /// Canino e pré-molar: altura da ponta (mm) — a borda sobe dos lados.
+  final double cusp;
+
+  const _Tooth(
+    this.width,
+    this.length, {
+    this.shorter = 0,
+    this.translucent = 1,
+    this.mesialRound = 0.2,
+    this.distalRound = 0.35,
+    this.cusp = 0,
+  });
+
+  /// Até onde o dente vai (0 = colo, 1 = borda) na coluna [u] (-1 do lado
+  /// do meio da boca, 1 do lado de fora).
+  double end(double u) {
+    final round = u < 0 ? mesialRound : distalRound;
+    final t = ((u.abs() - (1 - round)) / round).clamp(0.0, 1.0);
+    final corner = 1 - round * width / 2 / length * (1 - math.sqrt(1 - t * t));
+    if (cusp == 0) return corner;
+    // Ponta um pouco puxada pro lado do meio, como no canino.
+    final d = (u + 0.1).abs() / 1.1;
+    return math.min(corner, 1 - cusp / length * math.pow(d, 1.6));
+  }
+}
+
+const _upperTeeth = [
+  _Tooth(8.5, 10.5, mesialRound: 0.14, distalRound: 0.3),
+  _Tooth(6.6, 9, shorter: 0.6, translucent: 0.9, mesialRound: 0.22, distalRound: 0.35),
+  _Tooth(7.6, 10, shorter: 0.2, translucent: 0.5, mesialRound: 0.15, distalRound: 0.2, cusp: 1.3),
+  _Tooth(7, 8.5, shorter: 0.6, translucent: 0.3, mesialRound: 0.15, distalRound: 0.2, cusp: 1),
+  _Tooth(6.5, 7.5, shorter: 0.9, translucent: 0.2, mesialRound: 0.15, distalRound: 0.2, cusp: 0.9),
+];
+
+const _lowerTeeth = [
+  _Tooth(5, 9, mesialRound: 0.12, distalRound: 0.15),
+  _Tooth(5.5, 9.5, translucent: 0.9, mesialRound: 0.15, distalRound: 0.25),
+  _Tooth(7, 11, translucent: 0.5, mesialRound: 0.15, distalRound: 0.2, cusp: 1.1),
+  _Tooth(7, 8.5, shorter: 0.6, translucent: 0.3, mesialRound: 0.15, distalRound: 0.2, cusp: 0.9),
+  _Tooth(7, 8, shorter: 0.8, translucent: 0.2, mesialRound: 0.15, distalRound: 0.2, cusp: 0.8),
+];
+
+/// Ponto da arcada (parábola z = -a·x², em pixels) a [s] pixels do meio,
+/// medidos ao longo dela, e a normal pra fora (x, z).
+(double, double, double, double) _arch(double s, double a) {
+  double asinh(double y) => math.log(y + math.sqrt(y * y + 1));
+  double length(double x) {
+    final k = 2 * a * x;
+    return (k * math.sqrt(1 + k * k) + asinh(k)) / (4 * a);
+  }
+
+  var x = s;
+  for (var i = 0; i < 5; i++) {
+    final k = 2 * a * x;
+    x -= (length(x) - s) / math.sqrt(1 + k * k);
+  }
+  final k = 2 * a * x;
+  final n = math.sqrt(1 + k * k);
+  return (x, -a * x * x, k / n, 1 / n);
+}
+
+double _mix3(double body, double neck, double edge, double toNeck, double toEdge) {
+  final b = body + (neck - body) * toNeck;
+  return b + (edge - b) * toEdge;
+}
+
 double _smoothstep(double edge0, double edge1, double x) {
   final t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
   return t * t * (3 - 2 * t);
@@ -166,8 +265,12 @@ class _Rig {
     final lipGap = 0.62 * _halfWidth * p.lips * (1 - p.bite);
     // O lábio de cima mexe bem menos que o de baixo (que vai com o queixo);
     // no bico ele participa mais.
-    final upperShare = 0.24 + 0.12 * p.round;
-    final upperTeethEdge = _seamCenterY + 0.02 * _halfWidth;
+    // No sorriso ("I", "E", "S") o lábio de cima sobe mais e mostra os
+    // dentes de cima, como numa boca de verdade.
+    final upperShare = 0.24 + 0.12 * p.round + 0.36 * math.max(0.0, p.width - 0.6);
+    // A borda dos incisivos de cima fica uns 1,5 mm abaixo da linha dos
+    // lábios: no sorriso são eles que aparecem, não os de baixo.
+    final upperTeethEdge = _seamCenterY + 1.5 * _mm;
     return _Rig._(
       pose: p,
       upperRaise: lipGap * upperShare + 0.10 * _halfWidth * p.bite,
@@ -232,12 +335,6 @@ class _PhotoMouthPainter extends CustomPainter {
   static const _cavityDeep = Color(0xFF1C0406);
   static const _cavityNear = Color(0xFF5A1C22);
   static const _innerLip = Color(0xFF7E2A32);
-  static const _toothEdge = Color(0xFFE6DFD2);
-  static const _toothRoot = Color(0xFFA89A89);
-  static const _toothFar = Color(0xFF5E4E46);
-  static const _tongueLight = Color(0xFFD46F78);
-  static const _tongueDark = Color(0xFF8C3440);
-  static const _tongueUnder = Color(0xFFA2485A);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -350,9 +447,16 @@ class _PhotoMouthPainter extends CustomPainter {
         ),
     );
 
-    _paintTongue(canvas, rig);
-    _paintTeeth(canvas, edge: rig.lowerTeethEdge, upper: false);
-    _paintTeeth(canvas, edge: rig.upperTeethEdge, upper: true);
+    _paintTongue(canvas, rig, center, halfOpen);
+    // Sombra que os dentes e o lábio de cima fazem na língua logo abaixo.
+    canvas.drawRect(
+      Rect.fromLTRB(area.left, rig.upperTeethEdge - 20, area.right, rig.upperTeethEdge + 50),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.28)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+    );
+    _paintTeeth(canvas, edge: rig.lowerTeethEdge, upper: false, vanish: center, lip: lowerEdge);
+    _paintTeeth(canvas, edge: rig.upperTeethEdge, upper: true, vanish: center, lip: upperEdge);
 
     // Fundo e cantos da boca mais escuros: a luz entra pela frente.
     canvas.save();
@@ -380,8 +484,8 @@ class _PhotoMouthPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeJoin = StrokeJoin.round
-          ..color = _innerLip.withValues(alpha: 0.9)
-          ..strokeWidth = 60
+          ..color = _innerLip.withValues(alpha: 0.8)
+          ..strokeWidth = 46
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
       );
     }
@@ -395,168 +499,496 @@ class _PhotoMouthPainter extends CustomPainter {
     );
   }
 
-  /// Uma fileira de dentes, do meio pros lados. Os de cima têm os dois da
-  /// frente maiores; os do fundo ficam mais escuros e mais curtos (a
-  /// arcada faz curva).
+  /// Uma fileira de dentes (incisivos central e lateral, canino e dois
+  /// pré-molares de cada lado), cada um uma malhinha 3D — retângulos com
+  /// degradê pareciam "teclas" de desenho ao lado da foto. Os dentes ficam
+  /// numa arcada em parábola (os de trás recuam, encolhem na perspectiva e
+  /// pegam menos luz), com o formato e o tamanho de dentes de verdade e a
+  /// luz calculada ponto a ponto: a face da frente é abaulada (escurece nos
+  /// lados, onde um dente encosta no outro), o esmalte tem brilho, a borda
+  /// é translúcida (deixa ver o escuro da boca) e o colo, perto da gengiva,
+  /// é mais amarelado. [lip] é a borda do lábio que cobre a fileira: o
+  /// dente escurece logo abaixo (ou acima) dela, na sombra do lábio.
   void _paintTeeth(
     Canvas canvas, {
     required double edge,
     required bool upper,
+    required Offset vanish,
+    required List<Offset> lip,
     double opacity = 1,
   }) {
-    const upperWidths = [205.0, 160.0, 135.0, 105.0, 85.0, 70.0];
-    const lowerWidths = [130.0, 135.0, 140.0, 115.0, 90.0, 75.0];
-    final widths = upper ? upperWidths : lowerWidths;
-    const gap = 5.0;
-    const height = 380.0;
-    // Da borda pra raiz, o dente escurece (sombra do lábio/gengiva) ao
-    // longo de [fade] pixels — o resto fica escondido atrás do lábio.
-    const fade = 190.0;
+    final teeth = upper ? _upperTeeth : _lowerTeeth;
+    // Os de baixo ficam atrás dos de cima (a borda de cima cobre a de
+    // baixo uns 2,5 mm quando os dentes se encostam, como no "S").
+    final front = upper ? 0.0 : -2.5 * _mm;
+    final incisal = upper ? edge : edge - 2.5 * _mm;
+    final curve = upper ? 0.0011 : 0.0013;
+    final texture = Paint()
+      ..shader = ImageShader(
+        _enamelTexture(),
+        TileMode.repeated,
+        TileMode.repeated,
+        Matrix4.identity().storage,
+        filterQuality: FilterQuality.medium,
+      );
+
+    double lipY(double x) {
+      if (x <= lip.first.dx) return lip.first.dy;
+      for (var i = 1; i < lip.length; i++) {
+        if (x <= lip[i].dx) {
+          final a = lip[i - 1], b = lip[i];
+          return a.dy + (b.dy - a.dy) * (x - a.dx) / (b.dx - a.dx);
+        }
+      }
+      return lip.last.dy;
+    }
+
+    // Gengiva atrás da fileira: entre os dentes, perto do colo, aparece
+    // ela (rosa) e não o escuro da boca.
+    final gumFrom = incisal + (upper ? -0.4 : 0.4) * 10 * _mm;
+    canvas.drawRect(
+      Rect.fromLTRB(_centerX - 900, math.min(gumFrom, gumFrom + (upper ? -400 : 400)),
+          _centerX + 900, math.max(gumFrom, gumFrom + (upper ? -400 : 400))),
+      Paint()
+        ..color = const Color(0xFF8E3E46).withValues(alpha: opacity)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
+    );
+
+    // Começo de cada dente na arcada, a partir do meio.
+    final starts = <double>[];
+    var s = 0.0;
+    for (final t in teeth) {
+      starts.add(s);
+      s += t.width * _mm + 0.5; // encostados: fresta mostraria o preto da boca
+    }
+
+    const columns = 22;
+    const rows = 16;
+    const lx = 0.12 / 1.12, ly = -0.5 / 1.12, lz = 1.0 / 1.12;
+    final hLen = math.sqrt(lx * lx + ly * ly + (lz + 1) * (lz + 1));
+    final hx = lx / hLen, hy = ly / hLen, hz = (lz + 1) / hLen;
 
     for (final side in const [-1.0, 1.0]) {
-      var x = gap / 2;
-      for (var i = 0; i < widths.length; i++) {
-        final w = widths[i];
-        final u = (x + w / 2) / _halfWidth;
-        final curve = 0.07 * _halfWidth * u * u;
-        final toothEdge = upper ? edge - curve : edge + curve;
-        final left = _centerX + side * (side < 0 ? x + w : x);
-        final rect = upper
-            ? Rect.fromLTRB(left, toothEdge - height, left + w, toothEdge)
-            : Rect.fromLTRB(left, toothEdge, left + w, toothEdge + height);
-        // Os do fundo da arcada pegam menos luz.
-        final far = (i * 0.2).clamp(0.0, 0.9);
-        final tip = Color.lerp(_toothEdge, _toothFar, far)!;
-        final root = Color.lerp(_toothRoot, _toothFar, far)!;
-        // Canto pouco arredondado: muito redondo vira fileira de "teclas"
-        // com um "v" escuro entre cada dente.
-        final radius = Radius.circular(w * 0.14);
-        final towardRoot = upper ? -fade : fade;
-        canvas.drawRRect(
-          upper
-              ? RRect.fromRectAndCorners(rect, bottomLeft: radius, bottomRight: radius)
-              : RRect.fromRectAndCorners(rect, topLeft: radius, topRight: radius),
-          Paint()
-            ..shader = ui.Gradient.linear(
-              Offset(0, toothEdge + towardRoot),
-              Offset(0, toothEdge),
-              [
-                root.withValues(alpha: opacity),
-                tip.withValues(alpha: opacity),
-                // Borda do dente é meio translúcida, puxa pro cinza.
-                Color.lerp(tip, const Color(0xFFB9BCC2), 0.45)!.withValues(alpha: opacity),
-              ],
-              const [0, 0.82, 1],
-            )
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+      // Do fundo pra frente: o da frente cobre a beirada do de trás.
+      for (var i = teeth.length - 1; i >= 0; i--) {
+        final t = teeth[i];
+        final halfWidth = t.width * _mm / 2;
+        final length = t.length * _mm;
+        final center = starts[i] + halfWidth;
+        final toothEdge = incisal + (upper ? -1 : 1) * t.shorter * _mm;
+        final positions = <Offset>[];
+        final colors = <Color>[];
+        final coords = <Offset>[];
+        for (var c = 0; c <= columns; c++) {
+          // u: -1 do lado do meio da boca, 1 do lado de fora.
+          final u = -1 + 2 * c / columns;
+          final end = t.end(u);
+          for (var r = 0; r <= rows; r++) {
+            // v: 0 no colo (escondido no lábio), 1 na borda que corta.
+            final v = end * r / rows;
+            // Coroa mais estreita no colo.
+            final narrow = 0.8 + 0.2 * _smoothstep(0.0, 0.55, v);
+            final (ax, az, anx, anz) = _arch(center + u * halfWidth * narrow, curve);
+            // Dente inclinado pra frente: a borda mais à frente que o colo.
+            final z = front + az - (1 - v) * 0.22 * length;
+            final x = _centerX + side * ax;
+            final y = upper ? toothEdge - length * (1 - v) : toothEdge + length * (1 - v);
+            final scale = _cameraDistance / (_cameraDistance - z);
+            positions.add(Offset(vanish.dx + (x - vanish.dx) * scale, vanish.dy + (y - vanish.dy) * scale));
+            coords.add(Offset(128 + 120 * u, 256 * v));
+
+            // Normal: a da arcada, girada pela curva da face (de lado a
+            // lado e de cima a baixo) e pela inclinação do dente.
+            final phi = 0.4 * u;
+            final cosP = math.cos(phi), sinP = math.sin(phi);
+            var nx = side * (anx * cosP + anz * sinP);
+            var nz = -anx * sinP + anz * cosP;
+            var ny = upper ? -0.15 + 0.35 * (v - 0.6) : 0.15 - 0.35 * (v - 0.6);
+            final nLen = math.sqrt(nx * nx + ny * ny + nz * nz);
+            nx /= nLen;
+            ny /= nLen;
+            nz /= nLen;
+            final diffuse = ((nx * lx + ny * ly + nz * lz + 0.3) / 1.3).clamp(0.0, 1.0);
+            // O brilho do esmalte é uma faixinha vertical: o dente é bem
+            // mais curvo de lado a lado do que de cima a baixo. Por isso a
+            // normal do brilho gira mais com u e quase nada com v (com a
+            // mesma normal da luz difusa, saía uma faixa horizontal de
+            // metal).
+            final phiS = 1.3 * u;
+            final cosS = math.cos(phiS), sinS = math.sin(phiS);
+            final sx = side * (anx * cosS + anz * sinS);
+            final sz = -anx * sinS + anz * cosS;
+            final sy = upper ? -0.24 + 0.12 * (v - 0.6) : 0.1;
+            final sLen = math.sqrt(sx * sx + sy * sy + sz * sz);
+            final nh = math.max(0.0, (sx * hx + sy * hy + sz * hz) / sLen);
+            final spec = 0.26 * math.pow(nh, 60) + 0.05 * math.pow(nh, 12);
+            final depth = math.pow((1 + z / (1.6 * _halfWidth)).clamp(0.2, 1.0), 1.2).toDouble();
+            final contact = 1 - 0.25 * _smoothstep(0.82, 1.0, u.abs());
+            // Sombra do lábio: só uma faixa estreita junto dele — o pedaço
+            // de dente que aparece é pequeno, uma sombra larga o deixa todo
+            // cinza.
+            final underLip = upper ? y - lipY(x) : lipY(x) - y;
+            final lipShadow = 0.55 + 0.45 * _smoothstep(0.0, 35.0, underLip);
+            final lit = depth * contact * lipShadow;
+
+            // Esmalte marfim; colo mais amarelado; borda translúcida
+            // (azulada e deixando passar o fundo).
+            final neck = 1 - _smoothstep(0.15, 0.6, v);
+            final clear = _smoothstep(end - 0.16, end, v) * t.translucent;
+            double tone(double body, double neckTone, double edgeTone) =>
+                _mix3(body, neckTone, edgeTone, neck, clear);
+            final shade = (0.66 + 0.5 * diffuse) * lit;
+            int channel(double base, double tint) =>
+                (255 * (base * shade + spec * lit * tint)).round().clamp(0, 255);
+            colors.add(
+              Color.fromARGB(
+                (255 * opacity * (1 - 0.12 * clear)).round(),
+                channel(tone(0.95, 0.90, 0.74), 1),
+                channel(tone(0.92, 0.82, 0.78), 1),
+                channel(tone(0.86, 0.66, 0.84), 1),
+              ),
+            );
+          }
+        }
+        final indices = <int>[];
+        for (var c = 0; c < columns; c++) {
+          for (var r = 0; r < rows; r++) {
+            final a = c * (rows + 1) + r;
+            final b = a + rows + 1;
+            indices.addAll([a, b, a + 1, a + 1, b, b + 1]);
+          }
+        }
+        final vertices = ui.Vertices(
+          ui.VertexMode.triangles,
+          positions,
+          colors: colors,
+          textureCoordinates: coords,
+          indices: indices,
         );
-        // Sombra de um lado de cada dente: dá volume e marca a divisão
-        // entre eles sem um risco preto.
-        canvas.drawRect(
-          Rect.fromLTRB(
-            side < 0 ? rect.left : rect.right - w * 0.22,
-            rect.top,
-            side < 0 ? rect.left + w * 0.22 : rect.right,
-            rect.bottom,
-          ),
-          Paint()
-            ..color = const Color(0xFF6D5D52).withValues(alpha: 0.22 * opacity)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
-        );
-        x += w + gap;
+        canvas.drawVertices(vertices, BlendMode.modulate, texture);
+        vertices.dispose();
       }
     }
   }
 
-  void _paintTongue(Canvas canvas, _Rig rig) {
+  static ui.Image? _enamelTextureCache;
+
+  /// Textura do esmalte (256x256, multiplicada pela cor iluminada): as
+  /// linhas horizontais bem fracas do crescimento do esmalte (periquimácias)
+  /// e manchinhas mais brancas e mais opacas, como em dente de verdade.
+  static ui.Image _enamelTexture() {
+    final cached = _enamelTextureCache;
+    if (cached != null) return cached;
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder);
+    const n = 256.0;
+    c.drawRect(const Rect.fromLTWH(0, 0, n, n), Paint()..color = const Color(0xFFF2F2F2));
+    final line = Paint()
+      ..color = const Color(0xFFD9D9D9).withValues(alpha: 0.35)
+      ..strokeWidth = 1.2
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1);
+    for (var y = 3.0; y < n; y += 7) {
+      c.drawLine(Offset(0, y), Offset(n, y + 2), line);
+    }
+    final random = math.Random(3);
+    final spot = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    for (var i = 0; i < 40; i++) {
+      spot.color = (random.nextBool() ? const Color(0xFFFFFFFF) : const Color(0xFFE2DED8))
+          .withValues(alpha: 0.4);
+      c.drawCircle(
+        Offset(random.nextDouble() * n, random.nextDouble() * n),
+        6 + 14 * random.nextDouble(),
+        spot,
+      );
+    }
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(n.toInt(), n.toInt());
+    picture.dispose();
+    return _enamelTextureCache = image;
+  }
+
+  /// A língua é uma superfície em 3D (simples) vista de frente, com
+  /// perspectiva e luz calculada ponto a ponto — uma forma chapada com
+  /// degradê não fica no nível da foto. O corte do meio da língua (do
+  /// assoalho da boca, por baixo, até a ponta e daí até a raiz, no fundo) é
+  /// uma curva por 6 pontos que a pose move; a largura vem dobrada pra
+  /// baixo nas bordas (a língua é abaulada) com o sulco no meio do dorso.
+  /// Assim a mesma superfície mostra o dorso com papilas quando está
+  /// deitada ("A") e o lado de baixo, liso, arroxeado, com o freio e as
+  /// veias, quando a ponta sobe ("L", "T").
+  void _paintTongue(Canvas canvas, _Rig rig, Offset vanish, double halfOpen) {
     final p = rig.pose;
-    // Deitada atrás dos dentes de baixo; a ponta sobe até atrás dos dentes
-    // de cima ("L", "N", "D", "T"); o fundo sobe num morro largo ("C", "G").
-    final restTop = rig.lowerTeethEdge - 0.14 * _halfWidth;
-    final tipTop = rig.upperTeethEdge - 0.01 * _halfWidth;
-    final backTop = rig.upperTeethEdge + 0.06 * _halfWidth;
-    final top =
-        restTop + (tipTop - restTop) * p.tongueTip + (backTop - restTop) * p.tongueBack;
-    // Largura na base e na ponta: com a ponta erguida a língua afina em
-    // cima (vira um "dedo" largo); deitada ou com o fundo erguido, é um
-    // morro largo.
-    final base = _halfWidth * (0.62 + 0.1 * p.tongueBack - 0.14 * p.tongueTip);
-    final tip = base * (0.66 + 0.12 * p.tongueTip);
-    final drop = _halfWidth * (0.3 + 0.1 * p.tongueTip);
-    final bottom = top + _halfWidth;
+    const h = _halfWidth;
+    final ute = rig.upperTeethEdge;
+    final lte = rig.lowerTeethEdge;
+    double mix(double a, double b, double t) => a + (b - a) * t;
 
-    final tongue = Path()
-      ..moveTo(_centerX - base, bottom)
-      ..cubicTo(
-        _centerX - base, top + drop,
-        _centerX - tip, top + drop * 0.35,
-        _centerX - tip * 0.55, top + drop * 0.06,
-      )
-      ..quadraticBezierTo(_centerX, top - drop * 0.04, _centerX + tip * 0.55, top + drop * 0.06)
-      ..cubicTo(
-        _centerX + tip, top + drop * 0.35,
-        _centerX + base, top + drop,
-        _centerX + base, bottom,
-      )
-      ..close();
+    // Deitada, a língua acompanha o queixo (posições a partir dos dentes de
+    // baixo); erguida, encosta no céu da boca, que é fixo (a partir dos de
+    // cima). Um articulador puxa um pouco os vizinhos: a ponta subindo leva
+    // junto a frente do dorso, e o dorso da frente e o de trás se puxam.
+    final tip = p.tongueTip;
+    final frontLift = math.max(p.tongueFront, math.max(0.35 * p.tongueBack, 0.3 * tip));
+    final backLift = math.max(p.tongueBack, 0.35 * p.tongueFront);
+    final floor = (lte + 0.42 * h, -0.17 * h, 0.30 * h);
+    // Ponta: atrás dos dentes de baixo, ou nos alvéolos (atrás dos de cima).
+    final tipY = mix(lte - 0.05 * h, ute - 0.10 * h, tip);
+    final control = <(double, double, double)>[
+      floor,
+      (mix(lte + 0.18 * h, (floor.$1 + tipY) / 2, tip), mix(-0.14 * h, -0.10 * h, tip), mix(0.5, 0.42, tip) * h),
+      (tipY, mix(-0.10 * h, -0.16 * h, tip), mix(0.62, mix(0.50, 0.34, p.tongueNarrow), tip) * h),
+      // Deitada, o dorso fica acima da borda dos dentes de baixo, e não
+      // desce tudo que o queixo desce: no "A" é ele que enche o fundo do
+      // vão.
+      (mix(lte - (0.15 + 0.12 * p.jaw) * h, ute - 0.27 * h, frontLift), -0.42 * h, 0.62 * h),
+      (mix(lte - (0.11 + 0.12 * p.jaw) * h, ute - 0.22 * h, backLift), -0.80 * h, 0.56 * h),
+      (lte + 0.10 * h, -1.15 * h, 0.44 * h),
+    ];
+    const knots = [-1.0, -0.5, 0.0, 0.35, 0.7, 1.0];
 
-    // Ponta erguida: vemos o lado de baixo, mais arroxeado. Fundo erguido:
-    // mais longe da luz, mais escuro.
-    final light = Color.lerp(
-      Color.lerp(_tongueLight, _tongueUnder, p.tongueTip)!,
-      _tongueDark,
-      0.35 * p.tongueBack,
-    )!;
-    canvas.drawPath(
-      tongue,
+    // Curva do meio (Catmull-Rom pelos pontos de controle).
+    (double, double, double) along(double t) {
+      var j = 0;
+      while (j < knots.length - 2 && t > knots[j + 1]) {
+        j++;
+      }
+      final u = ((t - knots[j]) / (knots[j + 1] - knots[j])).clamp(0.0, 1.0);
+      final a = control[math.max(0, j - 1)];
+      final b = control[j];
+      final c = control[j + 1];
+      final d = control[math.min(control.length - 1, j + 2)];
+      double cr(double p0, double p1, double p2, double p3) =>
+          0.5 *
+          (2 * p1 +
+              (-p0 + p2) * u +
+              (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u +
+              (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
+      return (cr(a.$1, b.$1, c.$1, d.$1), cr(a.$2, b.$2, c.$2, d.$2), cr(a.$3, b.$3, c.$3, d.$3));
+    }
+
+    // Uma linha da malha bem na ponta (t = 0), que é onde o dorso vira o
+    // lado de baixo: as duas texturas se encontram ali.
+    const half = _tongueRows ~/ 2;
+    final ts = [
+      for (var i = 0; i <= _tongueRows; i++) i < half ? -1 + i / half : (i - half) / half,
+    ];
+    final mid = [for (final t in ts) along(t)];
+    // Distância de cada linha até a ponta, medida na superfície.
+    final arc = List<double>.filled(ts.length, 0);
+    for (var i = half + 1; i < ts.length; i++) {
+      arc[i] = arc[i - 1] + math.sqrt(_sq(mid[i].$1 - mid[i - 1].$1) + _sq(mid[i].$2 - mid[i - 1].$2));
+    }
+    for (var i = half - 1; i >= 0; i--) {
+      arc[i] = arc[i + 1] - math.sqrt(_sq(mid[i].$1 - mid[i + 1].$1) + _sq(mid[i].$2 - mid[i + 1].$2));
+    }
+
+    // Luz de frente e um pouco de cima, como na foto.
+    const light = (0.12, -0.5, 1.0);
+    final lightLen = math.sqrt(_sq(light.$1) + _sq(light.$2) + _sq(light.$3));
+    final lx = light.$1 / lightLen, ly = light.$2 / lightLen, lz = light.$3 / lightLen;
+    final hLen = math.sqrt(_sq(lx) + _sq(ly) + _sq(lz + 1));
+    final hx = lx / hLen, hy = ly / hLen, hz = (lz + 1) / hLen;
+    // Pouca abertura, pouca luz lá dentro — mas sem apagar a língua, que é
+    // o que a criança precisa ver no "N", "NH", "LH".
+    final lightIn = ((rig.upperRaise + rig.lowerDrop) / (0.4 * h)).clamp(0.65, 1.0);
+    // Ponta arredondada (vista de cima ou de frente); no "L" é fina.
+    final tipRound = 0.32 * h;
+    final tipMin = 0.55 - 0.3 * p.tongueNarrow;
+    // Bordas mais caídas no "L" (o ar passa pelos lados).
+    final dome = 0.28 + 0.3 * p.tongueNarrow * tip;
+    const grooveWidth = 0.17;
+    const frenulumWidth = 0.07;
+
+    final positions = <Offset>[];
+    final colors = <Color>[];
+    final texture = <Offset>[];
+    for (var i = 0; i < ts.length; i++) {
+      final (y0, z0, w0) = mid[i];
+      // Normal da curva do meio, pra fora da língua (pra cima no dorso, pra
+      // frente no lado de baixo).
+      final a = mid[math.max(0, i - 1)];
+      final b = mid[math.min(ts.length - 1, i + 1)];
+      final dy = b.$1 - a.$1, dz = b.$2 - a.$2;
+      final len = math.max(1e-6, math.sqrt(dy * dy + dz * dz));
+      final ny = dz / len, nz = -dy / len;
+
+      final k = 1 - (arc[i].abs() / tipRound).clamp(0.0, 1.0);
+      final w = w0 * (tipMin + (1 - tipMin) * math.sqrt(1 - k * k));
+      final ventral = _smoothstep(0.02, -0.12, ts[i]);
+      final groove = 0.014 * h * _smoothstep(0.04, 0.3, ts[i]);
+      final frenulum = 0.014 * h * _smoothstep(-0.2, -0.65, ts[i]);
+      final v = arc[i] >= 0
+          ? 384 * (arc[i] / arc.last).clamp(0.0, 1.0)
+          : 384 + 127 * (arc[i] / arc.first).clamp(0.0, 1.0);
+
+      for (var j = 0; j <= _tongueColumns; j++) {
+        final s = -1 + 2 * j / _tongueColumns;
+        final g = groove * math.exp(-_sq(s / grooveWidth));
+        // O freio: uma dobra saltada no meio do lado de baixo.
+        final f = frenulum * math.exp(-_sq(s / frenulumWidth));
+        final r = w * (dome * s * s + 0.22 * math.pow(s, 6)) + g - f;
+        final slope = 2 * dome * s +
+            1.32 * math.pow(s, 5) -
+            g / w * 2 * s / _sq(grooveWidth) +
+            f / w * 2 * s / _sq(frenulumWidth);
+        final x = _centerX + s * w;
+        final y = y0 - ny * r;
+        final z = z0 - nz * r;
+        final scale = _cameraDistance / (_cameraDistance - z);
+        positions.add(Offset(vanish.dx + (x - vanish.dx) * scale, vanish.dy + (y - vanish.dy) * scale));
+        // Textura pela largura real (não por fração da largura): perto da
+        // ponta, onde a língua afina, as papilas não se espremem.
+        texture.add(Offset(256 + 255 * s * w / (0.62 * h), v));
+
+        final nLen = math.sqrt(slope * slope + 1);
+        final nx = slope / nLen, nyy = ny / nLen, nzz = nz / nLen;
+        // Luz "enrolada" (passa um pouco do terminador): tecido mole e
+        // úmido não tem sombra dura.
+        final diffuse = ((nx * lx + nyy * ly + nzz * lz + 0.4) / 1.4).clamp(0.0, 1.0);
+        final nh = math.max(0.0, nx * hx + nyy * hy + nzz * hz);
+        // Brilho: o dorso (papilas) é aveludado, brilho largo e fraco; o
+        // lado de baixo é liso e brilha mais, mais concentrado.
+        final spec = mix(
+          0.22 * math.pow(nh, 26) + 0.10 * math.pow(nh, 8),
+          0.22 * math.pow(nh, 40) + 0.05 * math.pow(nh, 10),
+          ventral,
+        );
+        // Fundo da boca recebe menos luz; acima da borda dos dentes de
+        // cima, a sombra deles.
+        final occlusion = math.pow((1 + z / (1.3 * h)).clamp(0.08, 1.0), 1.4).toDouble();
+        final teethShadow = 0.45 + 0.55 * _smoothstep(ute - 0.12 * h, ute + 0.05 * h, y);
+        // Com a ponta erguida, o dorso atrás dela fica na sombra da ponta.
+        final tipShadow = 1 - 0.5 * tip * _smoothstep(0.0, 0.15, ts[i]);
+        final lit = occlusion * teethShadow * tipShadow * lightIn;
+        final base = (
+          mix(0.88, 0.68, ventral),
+          mix(0.50, 0.30, ventral),
+          mix(0.52, 0.40, ventral),
+        );
+        final shade = (0.15 + 0.95 * diffuse) * lit / 0.92;
+        // As bordas (perto das bochechas) somem na penumbra da boca: vão
+        // pra cor do fundo da boca, não pro preto — senão viram manchas
+        // mais escuras que a própria boca.
+        // A cor do fundo é a do degradê pintado atrás, no mesmo ponto.
+        final fade = _smoothstep(0.5, 0.97, s.abs());
+        final screen = positions.last;
+        final cavity = Color.lerp(
+          _cavityDeep,
+          _cavityNear,
+          ((((screen - vanish).distance / halfOpen) - 0.25) / 0.75).clamp(0.0, 1.0),
+        )!;
+        int channel(double c, double tint, double back) =>
+            (255 * mix(c * shade + spec * lit * tint, back, fade)).round().clamp(0, 255);
+        colors.add(
+          Color.fromARGB(
+            255,
+            channel(base.$1, 1, cavity.r),
+            channel(base.$2, 0.9, cavity.g),
+            channel(base.$3, 0.92, cavity.b),
+          ),
+        );
+      }
+    }
+
+    // Dorso primeiro (do fundo pra ponta), depois o lado de baixo — que,
+    // com a ponta erguida, fica na frente do dorso.
+    const stride = _tongueColumns + 1;
+    List<int> band(int from, int to) => [
+      for (var i = from; i >= to; i--)
+        for (var j = 0; j < _tongueColumns; j++) ...[
+          i * stride + j,
+          (i + 1) * stride + j,
+          i * stride + j + 1,
+          i * stride + j + 1,
+          (i + 1) * stride + j,
+          (i + 1) * stride + j + 1,
+        ],
+    ];
+    final paint = Paint()
+      ..shader = ImageShader(
+        _tongueTexture(),
+        TileMode.clamp,
+        TileMode.clamp,
+        Matrix4.identity().storage,
+        filterQuality: FilterQuality.medium,
+      );
+    for (final indices in [band(ts.length - 2, half), band(half - 1, 0)]) {
+      final vertices = ui.Vertices(
+        ui.VertexMode.triangles,
+        positions,
+        colors: colors,
+        textureCoordinates: texture,
+        indices: indices,
+      );
+      canvas.drawVertices(vertices, BlendMode.modulate, paint);
+      vertices.dispose();
+    }
+  }
+
+  static ui.Image? _tongueTextureCache;
+
+  /// Textura da língua (512x512, multiplicada pela cor iluminada). Em cima
+  /// (v 0–384, da ponta pra raiz) o dorso: pontinhos claros das papilas
+  /// filiformes, que dão o aspecto aveludado, e as fungiformes, pontos
+  /// avermelhados maiores, mais na ponta e nas bordas. Embaixo (v 384–512,
+  /// da ponta pro assoalho) o lado de baixo: liso, com as duas veias
+  /// azuladas e o freio no meio.
+  static ui.Image _tongueTexture() {
+    final cached = _tongueTextureCache;
+    if (cached != null) return cached;
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder);
+    const n = 512.0;
+    c.drawRect(const Rect.fromLTWH(0, 0, n, 384), Paint()..color = const Color(0xFFEAE2E2));
+    final random = math.Random(7);
+    final dot = Paint();
+    for (var i = 0; i < 9000; i++) {
+      final light = random.nextDouble() < 0.7;
+      dot.color = (light ? const Color(0xFFFFFAFA) : const Color(0xFFD6CACB))
+          .withValues(alpha: 0.25 + 0.3 * random.nextDouble());
+      c.drawCircle(
+        Offset(random.nextDouble() * n, random.nextDouble() * 384),
+        0.8 + random.nextDouble(),
+        dot,
+      );
+    }
+    final fungiform = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1);
+    for (var i = 0; i < 900; i++) {
+      final u = random.nextDouble();
+      final v = random.nextDouble();
+      // Mais perto da ponta (v pequeno) e das bordas (u perto de 0 ou 1).
+      final edge = (u - 0.5).abs() * 2;
+      if (random.nextDouble() > 0.25 + 0.75 * math.max(1 - v * 2.5, edge * edge)) continue;
+      fungiform.color = const Color(0xFFE39CA4).withValues(alpha: 0.55 + 0.3 * random.nextDouble());
+      c.drawCircle(Offset(u * n, v * 384), 1.6 + 1.6 * random.nextDouble(), fungiform);
+    }
+    c.drawRect(const Rect.fromLTWH(0, 384, n, 128), Paint()..color = const Color(0xFFF3EDEE));
+    final vein = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 9
+      ..color = const Color(0xFFC2B4D8).withValues(alpha: 0.45)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    for (final side in const [-1.0, 1.0]) {
+      final x = n / 2 + side * 0.15 * n;
+      c.drawPath(
+        Path()
+          ..moveTo(x + side * 6, 425)
+          ..cubicTo(x - side * 8, 450, x + side * 10, 480, x - side * 4, 512),
+        vein,
+      );
+    }
+    c.drawLine(
+      const Offset(n / 2, 440),
+      const Offset(n / 2, 512),
       Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(0, top),
-          Offset(0, top + _halfWidth * 0.5),
-          [light, _tongueDark],
-        )
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-    // Lados da língua mais escuros: ela é arredondada, não chapada.
-    canvas.save();
-    canvas.clipPath(tongue);
-    canvas.drawRect(
-      Rect.fromLTRB(_centerX - base, top - 20, _centerX + base, bottom),
-      Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(_centerX - base, 0),
-          Offset(_centerX + base, 0),
-          [
-            Colors.black.withValues(alpha: 0.45),
-            Colors.transparent,
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.45),
-          ],
-          const [0, 0.35, 0.65, 1],
-        ),
-    );
-    canvas.restore();
-    // Sulco do meio (ou o freio, quando a ponta está erguida) e um brilho
-    // de língua molhada.
-    canvas.drawLine(
-      Offset(_centerX, top + 30),
-      Offset(_centerX, top + _halfWidth * 0.5),
-      Paint()
-        ..color = _tongueDark.withValues(alpha: 0.5 + 0.3 * p.tongueTip)
-        ..strokeWidth = 10 + 8 * p.tongueTip
-        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 12
+        ..color = const Color(0xFFFFFFFF).withValues(alpha: 0.35)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(_centerX - tip * 0.2, top + 40),
-        width: tip * 0.6,
-        height: 30,
-      ),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.16)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
-    );
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(n.toInt(), n.toInt());
+    picture.dispose();
+    return _tongueTextureCache = image;
   }
 
   /// "F"/"V": os dentes de cima por cima do lábio de baixo, com a sombra
@@ -593,7 +1025,14 @@ class _PhotoMouthPainter extends CustomPainter {
     );
     canvas.save();
     canvas.clipPath(region);
-    _paintTeeth(canvas, edge: teethEdge, upper: true, opacity: bite);
+    _paintTeeth(
+      canvas,
+      edge: teethEdge,
+      upper: true,
+      vanish: Offset(_centerX, _seamCenterY + (rig.lowerDrop - rig.upperRaise) / 2),
+      lip: upperEdge,
+      opacity: bite,
+    );
     canvas.restore();
   }
 

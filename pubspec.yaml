@@ -14,6 +14,7 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   video_player: ^2.14.1
+  audioplayers: ^6.8.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -36,3 +37,13 @@ flutter:
     # (<id da palavra>.mp3). Ver AGENTS.md.
     - assets/audio/letters/
     - assets/audio/words/
+    # Efeitos sonoros (WAV) e músicas de fundo (MP3 em loop), CC0. Fora de
+    # assets/audio/ de propósito: lá todo .mp3 precisa de curva de volume pra
+    # boca (lip_sync_test). Origem e licenças no AGENTS.md.
+    - assets/sfx/
+    - assets/music/
+    # Falas do Complete a Palavra (voz Yara): nome de cada letra, as palavras
+    # das fases e as comemorações. Ver AGENTS.md.
+    - assets/voice/letter_names/
+    - assets/voice/words/
+    - assets/voice/cheers/

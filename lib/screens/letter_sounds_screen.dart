@@ -4,21 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../audio/game_audio.dart';
 import '../controllers/lip_sync_player.dart';
 import '../data/letter_phases.dart';
 import '../data/lip_sync.dart';
-import '../models/difficulty.dart';
 import '../models/mouth_pose.dart';
 import '../models/word_item.dart';
 import '../utils/responsive.dart';
+import '../widgets/background_music.dart';
 import '../widgets/mouth_view.dart';
 import '../widgets/word_image.dart';
-import 'difficulty_screen.dart';
 
 /// O que aparece no card da boca.
 /// - `mouth`: a boquinha animada — foto real deformada (o caso normal).
 /// - `video`: existe um vídeo gravado pra letra; ele substitui o desenho.
 enum _MouthStatus { loading, mouth, video, error }
+
+/// Cor do Sons das Letras (barra, letra, destaque nas palavras e botões do
+/// menu de letras). Sem dificuldade não há a cor de nível dos outros jogos;
+/// é o roxo do card do jogo (`MinigameArt`), um pouco mais escuro pra o
+/// texto branco por cima ter contraste.
+const kLetterSoundsColor = Color(0xFF7E57C2);
 
 /// Sons das Letras: a letra, a boquinha fazendo o som dela e palavras de
 /// exemplo que começam com a letra. O som toca sozinho ao abrir e de novo a
@@ -30,14 +36,10 @@ enum _MouthStatus { loading, mouth, video, error }
 /// serve pra áudio puro, por isso não há um plugin de áudio separado), e
 /// quem mexe a boca no ritmo do áudio é o [LipSyncPlayer].
 class LetterSoundsScreen extends StatefulWidget {
-  final Difficulty difficulty;
+  /// Posição da letra em [kLetterPhases] (0 = A, 25 = Z).
   final int phaseIndex;
 
-  const LetterSoundsScreen({
-    super.key,
-    required this.difficulty,
-    required this.phaseIndex,
-  });
+  const LetterSoundsScreen({super.key, required this.phaseIndex});
 
   @override
   State<LetterSoundsScreen> createState() => _LetterSoundsScreenState();
@@ -65,14 +67,29 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
   Set<String> _assets = const {};
   _MouthStatus _status = _MouthStatus.loading;
 
-  List<LetterPhase> get _phases => kLetterPhases[widget.difficulty]!;
-  LetterPhase get _phase => _phases[widget.phaseIndex];
-  bool get _hasNextPhase => widget.phaseIndex + 1 < _phases.length;
+  LetterPhase get _phase => kLetterPhases[widget.phaseIndex];
+  // O alfabeto inteiro, sem parar em bloco nenhum: do A vai até o Z.
+  bool get _hasNextPhase => widget.phaseIndex + 1 < kLetterPhases.length;
+
+  /// A música de fundo está abaixada por causa de uma fala desta tela.
+  bool _ducking = false;
 
   @override
   void initState() {
     super.initState();
+    _lipSync.addListener(_updateDuck);
     _load();
+  }
+
+  /// Música de fundo some enquanto a letra ou a palavra toca: a criança
+  /// precisa ouvir o som, e a boca está sincronizada com ele.
+  void _updateDuck() {
+    final speaking =
+        _lipSync.isPlaying ||
+        (_status == _MouthStatus.video && (_letterMedia?.value.isPlaying ?? false));
+    if (speaking == _ducking) return;
+    _ducking = speaking;
+    GameAudio.instance.setDucked(speaking);
   }
 
   Future<void> _load() async {
@@ -89,6 +106,7 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
         return;
       }
       _letterMedia = video;
+      video?.addListener(_updateDuck);
       setState(() => _status = video == null ? _MouthStatus.error : _MouthStatus.video);
     } else {
       if (_assets.contains(_phase.audioPath)) {
@@ -175,6 +193,10 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
 
   @override
   void dispose() {
+    // Na hora, sem esperar: a tela está saindo e não pode deixar timer.
+    GameAudio.instance.setDucked(false, now: true);
+    _lipSync.removeListener(_updateDuck);
+    _letterMedia?.removeListener(_updateDuck);
     _lipSync.dispose();
     _letterMedia?.dispose();
     for (final audio in _wordAudio.values) {
@@ -184,12 +206,10 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
   }
 
   void _goToNextPhase() {
+    GameAudio.instance.play(Sfx.tap);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => LetterSoundsScreen(
-          difficulty: widget.difficulty,
-          phaseIndex: widget.phaseIndex + 1,
-        ),
+        builder: (_) => LetterSoundsScreen(phaseIndex: widget.phaseIndex + 1),
       ),
     );
   }
@@ -199,66 +219,69 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
     final letter = Center(child: _square(_buildLetterCard()));
     final mouth = Center(child: _square(_buildMouthCard()));
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF8E7),
-      appBar: AppBar(
-        title: Text(
-          '${widget.difficulty.label} · Fase ${widget.phaseIndex + 1} — ${_phase.title}',
-          style: const TextStyle(fontSize: 18),
-          overflow: TextOverflow.ellipsis,
+    return BackgroundMusic(
+      track: MusicTrack.game,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFF8E7),
+        appBar: AppBar(
+          title: Text(
+            'Sons das Letras — ${_phase.title}',
+            style: const TextStyle(fontSize: 18),
+            overflow: TextOverflow.ellipsis,
+          ),
+          backgroundColor: kLetterSoundsColor,
+          foregroundColor: Colors.white,
         ),
-        backgroundColor: difficultyColor(widget.difficulty),
-        foregroundColor: Colors.white,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          // Letra e boca sempre lado a lado, cada uma num quadrado do maior
-          // tamanho que couber (o Center solta a largura do Expanded pra o
-          // AspectRatio poder encolher quando a altura é que limita). As
-          // palavras vão pra onde sobra espaço: embaixo em retrato, numa
-          // terceira coluna em paisagem.
-          child: Column(
-            children: [
-              Expanded(
-                child: isLandscape(context)
-                    ? Row(
-                        children: [
-                          Expanded(flex: 2, child: letter),
-                          const SizedBox(width: 16),
-                          Expanded(flex: 3, child: mouth),
-                          const SizedBox(width: 16),
-                          Expanded(flex: 2, child: _buildWords()),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: Row(
-                              children: [
-                                Expanded(flex: 2, child: letter),
-                                const SizedBox(width: 16),
-                                Expanded(flex: 3, child: mouth),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Expanded(
-                            flex: 2,
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 520),
-                                child: _buildWords(),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            // Letra e boca sempre lado a lado, cada uma num quadrado do maior
+            // tamanho que couber (o Center solta a largura do Expanded pra o
+            // AspectRatio poder encolher quando a altura é que limita). As
+            // palavras vão pra onde sobra espaço: embaixo em retrato, numa
+            // terceira coluna em paisagem.
+            child: Column(
+              children: [
+                Expanded(
+                  child: isLandscape(context)
+                      ? Row(
+                          children: [
+                            Expanded(flex: 2, child: letter),
+                            const SizedBox(width: 16),
+                            Expanded(flex: 3, child: mouth),
+                            const SizedBox(width: 16),
+                            Expanded(flex: 2, child: _buildWords()),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Row(
+                                children: [
+                                  Expanded(flex: 2, child: letter),
+                                  const SizedBox(width: 16),
+                                  Expanded(flex: 3, child: mouth),
+                                ],
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-              ),
-              const SizedBox(height: 12),
-              _buildFooter(),
-            ],
+                            const SizedBox(height: 12),
+                            Expanded(
+                              flex: 2,
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 520),
+                                  child: _buildWords(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 12),
+                _buildFooter(),
+              ],
+            ),
           ),
         ),
       ),
@@ -289,7 +312,7 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
             style: TextStyle(
               fontSize: 120,
               fontWeight: FontWeight.bold,
-              color: difficultyColor(widget.difficulty),
+              color: kLetterSoundsColor,
             ),
           ),
         ),
@@ -372,7 +395,7 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
             child: _WordTile(
               word: word,
               letter: _phase.letter,
-              color: difficultyColor(widget.difficulty),
+              color: kLetterSoundsColor,
               onTap: () => _playWord(word),
             ),
           ),
@@ -408,7 +431,7 @@ class _LetterSoundsScreenState extends State<LetterSoundsScreen>
 }
 
 /// Uma palavra de exemplo: ilustração + nome, com a letra da fase destacada
-/// na cor da dificuldade onde quer que ela apareça na palavra.
+/// na cor do jogo onde quer que ela apareça na palavra.
 class _WordTile extends StatelessWidget {
   final WordItem word;
   final String letter;

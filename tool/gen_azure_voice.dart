@@ -11,6 +11,12 @@
 // alonga os sons de letra, ajusta o volume e grava o .mp3), copie pra
 // assets/audio/ e rode tool/gen_audio_envelopes.dart.
 //
+// Também gera as falas do Complete a Palavra em <saída>/voice/ (nome de
+// cada letra, as palavras das fases e as comemorações). Essas vão pra
+// assets/voice/, tratadas com treat_audio.sh sem duração alvo, e não
+// precisam de curva de volume (não há boca nesse jogo). Pra só elas:
+// `dart run tool/gen_azure_voice.dart <saída> voice`.
+//
 // Precisa das variáveis de ambiente AZURE_SPEECH_KEY e AZURE_SPEECH_REGION
 // (recurso "Speech"/"Fala" da Azure; o nível gratuito F0 basta). Só roda
 // aqui no PC — o app não fala com a Azure.
@@ -54,6 +60,29 @@ const _letterCopies = {'k': 'c', 'q': 'c', 'w': 'u', 'y': 'i'};
 /// Palavras cuja grafia confunde a voz: texto falado no lugar do nome.
 const _spoken = <String, String>{};
 
+/// Complete a Palavra: o NOME de cada letra (não o som, escolha do usuário),
+/// falado quando a criança acerta a letra. Grafia de como se fala: "é" e
+/// "ó" pra a voz não ler "e"/"o" como conjunção/artigo.
+const _letterNames = {
+  'a': 'á', 'b': 'bê', 'c': 'cê', 'd': 'dê', 'e': 'é', 'f': 'efe',
+  'g': 'gê', 'h': 'agá', 'i': 'i', 'j': 'jota', 'k': 'cá', 'l': 'ele',
+  'm': 'eme', 'n': 'ene', 'o': 'ó', 'p': 'pê', 'q': 'quê', 'r': 'erre',
+  's': 'esse', 't': 'tê', 'u': 'u', 'v': 'vê', 'w': 'dáblio', 'x': 'xis',
+  'y': 'ípsilon', 'z': 'zê',
+};
+
+/// Complete a Palavra: comemoração depois da palavra completa (uma sorteada).
+/// O usuário escolheu estas três; "Uhuu" ficou de fora.
+const _cheers = {
+  'parabens': 'Parabéns!',
+  'muito_bem': 'Muito bem!',
+  'isso_ai': 'Isso aí!',
+};
+
+/// Comemoração um pouco menos lenta que as palavras: devagar demais um
+/// "Parabéns!" perde a animação.
+const _cheerRate = '-20%';
+
 /// Mais devagar que a fala normal: é pra criança aprendendo. Nas letras, o
 /// mínimo que a Azure aceita, pra alongar menos depois.
 const _wordRate = '-40%';
@@ -92,15 +121,30 @@ Future<void> main(List<String> args) async {
       ('letters/$letter', _ssml(_phoneme(ipa, letter), _letterRate)),
     for (final id in words)
       ('words/$id', _ssml(_escape(_spoken[id] ?? names[id] ?? id), _wordRate)),
-  ].where((job) => only.isEmpty || only.contains(job.$1.split('/').last)).toList();
+    // Complete a Palavra (vai pra assets/voice/, ver AGENTS.md).
+    for (final MapEntry(key: letter, value: name) in _letterNames.entries)
+      ('voice/letter_names/$letter', _ssml(_escape(name), _wordRate)),
+    for (final id in _completionWordIds())
+      ('voice/words/$id', _ssml(_escape(_spoken[id] ?? names[id] ?? id), _wordRate)),
+    for (final MapEntry(key: id, value: text) in _cheers.entries)
+      ('voice/cheers/$id', _ssml(_escape(text), _cheerRate)),
+  ]
+      // Filtra pelo nome curto ("queijo"), pelo caminho inteiro
+      // ("voice/letter_names/a", porque "a" sozinho é som e nome ao mesmo
+      // tempo) ou por uma pasta inteira ("voice", "voice/cheers").
+      .where((job) =>
+          only.isEmpty ||
+          only.any((o) =>
+              job.$1 == o || job.$1.split('/').last == o || job.$1.startsWith('$o/')))
+      .toList();
 
-  Directory('$out/letters').createSync(recursive: true);
-  Directory('$out/words').createSync(recursive: true);
   final client = HttpClient();
   try {
     for (final (name, ssml) in jobs) {
       final audio = await _synthesize(client, region, key, ssml);
-      File('$out/$name.wav').writeAsBytesSync(audio);
+      File('$out/$name.wav')
+        ..parent.createSync(recursive: true)
+        ..writeAsBytesSync(audio);
       stdout.writeln('$name.wav ${audio.length} bytes');
       // Nível gratuito: no máximo 20 pedidos por minuto.
       await Future<void>.delayed(const Duration(milliseconds: 3100));
@@ -124,6 +168,21 @@ String _ssml(String body, String rate) =>
     '<voice name="$_voice"><prosody rate="$rate">$body</prosody></voice></speak>';
 
 String _escape(String text) => const HtmlEscape(HtmlEscapeMode.element).convert(text);
+
+/// Ids das palavras das fases do Complete a Palavra, sem repetir.
+List<String> _completionWordIds() {
+  final catalog = File('lib/data/word_catalog.dart').readAsStringSync();
+  final idOf = {
+    for (final m in RegExp(r"static const (\w+) = WordItem\(\s*id: '([^']+)'")
+        .allMatches(catalog))
+      m[1]!: m[2]!,
+  };
+  final phases = File('lib/data/completion_phases.dart').readAsStringSync();
+  return {
+    for (final m in RegExp(r'Words\.(\w+)').allMatches(phases)) idOf[m[1]!] ?? m[1]!,
+  }.toList()
+    ..sort();
+}
 
 /// id → nome (com acento) de cada palavra do catálogo.
 Map<String, String> _wordNames() {

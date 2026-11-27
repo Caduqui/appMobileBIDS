@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../audio/game_audio.dart';
 import '../models/difficulty.dart';
 import '../utils/responsive.dart';
+import '../widgets/background_music.dart';
 import 'difficulty_screen.dart';
 
 /// Terceira etapa do fluxo: lista as fases da dificuldade escolhida.
@@ -21,44 +23,47 @@ class PhasesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF8E7),
-      appBar: AppBar(
-        title: Text('$gameTitle — ${difficulty.label}'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Center(
-            // Limite de largura pra num tablet em paisagem os cards não
-            // ficarem espalhados longe um do outro na tela toda.
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxContentWidth(context)),
-              // SizedBox: o Wrap só ocupa a largura do conteúdo; sem ele o
-              // "center" valeria só dentro do bloco, encostado na esquerda.
-              child: SizedBox(
-                width: double.infinity,
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 24,
-                  runSpacing: 24,
-                  children: [
-                    for (var i = 0; i < phaseTitles.length; i++)
-                      _PhaseCard(
-                        number: i + 1,
-                        title: phaseTitles[i],
-                        color: difficultyColor(difficulty),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => gameBuilder(difficulty, i),
-                            ),
-                          );
-                        },
-                      ),
-                  ],
+    return BackgroundMusic(
+      track: MusicTrack.menu,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFF8E7),
+        appBar: AppBar(
+          title: Text('$gameTitle — ${difficulty.label}'),
+          backgroundColor: Colors.teal,
+          foregroundColor: Colors.white,
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Center(
+              // Limite de largura pra num tablet em paisagem os cards não
+              // ficarem espalhados longe um do outro na tela toda.
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxContentWidth(context)),
+                // SizedBox: o Wrap só ocupa a largura do conteúdo; sem ele o
+                // "center" valeria só dentro do bloco, encostado na esquerda.
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 24,
+                    runSpacing: 24,
+                    children: [
+                      for (var i = 0; i < phaseTitles.length; i++)
+                        _PhaseCard(
+                          number: i + 1,
+                          title: phaseTitles[i],
+                          color: difficultyColor(difficulty),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => gameBuilder(difficulty, i),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -90,7 +95,10 @@ class _PhaseCard extends StatelessWidget {
     final titleFontSize = responsiveValue(context, phone: 14.0, tablet: 18.0);
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        GameAudio.instance.play(Sfx.tap);
+        onTap();
+      },
       child: Container(
         width: width,
         height: height,

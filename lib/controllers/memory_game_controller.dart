@@ -21,6 +21,11 @@ class MemoryGameController extends ChangeNotifier {
   /// pra disparar o efeito de comemoração sem o controller conhecer a UI.
   VoidCallback? onMatchFound;
 
+  /// Uma carta virou pra cima por toque do jogador, e um par saiu errado.
+  /// Mesma ideia: a tela toca o som sem o controller conhecer áudio.
+  VoidCallback? onCardFlipped;
+  VoidCallback? onMismatch;
+
   String? _firstPickId;
   String? _secondPickId;
 
@@ -88,6 +93,7 @@ class MemoryGameController extends ChangeNotifier {
     if (tappedCard.state != CardState.faceDown) return;
 
     _updateCard(tappedCard.cardId, CardState.faceUp);
+    onCardFlipped?.call();
 
     if (_firstPickId == null) {
       _firstPickId = tappedCard.cardId;
@@ -133,6 +139,7 @@ class MemoryGameController extends ChangeNotifier {
     } else {
       _updateCard(firstId, CardState.mismatchError);
       _updateCard(secondId, CardState.mismatchError);
+      onMismatch?.call();
       notifyListeners();
 
       Future.delayed(_mismatchDuration, () {

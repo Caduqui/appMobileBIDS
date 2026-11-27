@@ -92,18 +92,13 @@ void main() {
   });
 
   group('Sons das Letras', () {
-    test('alfabeto inteiro, em ordem: Fácil A–I, Médio J–R, Difícil S–Z', () {
-      String letters(Difficulty d) => kLetterPhases[d]!.map((p) => p.letter).join();
-      expect(letters(Difficulty.easy), 'ABCDEFGHI');
-      expect(letters(Difficulty.medium), 'JKLMNOPQR');
-      expect(letters(Difficulty.hard), 'STUVWXYZ');
+    test('alfabeto inteiro, em ordem, de A a Z (sem dificuldade)', () {
+      expect(kLetterPhases.map((p) => p.letter).join(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
     });
 
     test('vídeo de cada letra segue a convenção de nome', () {
-      for (final phases in kLetterPhases.values) {
-        for (final phase in phases) {
-          expect(phase.videoPath, 'assets/videos/letters/${phase.letter.toLowerCase()}.mp4');
-        }
+      for (final phase in kLetterPhases) {
+        expect(phase.videoPath, 'assets/videos/letters/${phase.letter.toLowerCase()}.mp4');
       }
     });
 
@@ -114,8 +109,7 @@ void main() {
 
     test('todo vídeo na pasta é de uma letra (nome errado nunca seria achado)', () {
       final expected = {
-        for (final phases in kLetterPhases.values)
-          for (final phase in phases) phase.videoPath,
+        for (final phase in kLetterPhases) phase.videoPath,
       };
       final files = Directory('assets/videos/letters')
           .listSync()
@@ -128,40 +122,34 @@ void main() {
     });
 
     test('cada letra tem 2 ou 3 palavras de exemplo diferentes que contêm a letra', () {
-      for (final phases in kLetterPhases.values) {
-        for (final phase in phases) {
-          expect(phase.words.length, inInclusiveRange(2, 3), reason: phase.title);
-          expect(phase.words.map((w) => w.id).toSet(), hasLength(phase.words.length), reason: phase.title);
-          for (final word in phase.words) {
-            expect(
-              word.name.split('').any((char) => isSameLetter(char, phase.letter)),
-              isTrue,
-              reason: '${word.name} não tem a letra ${phase.letter}',
-            );
-          }
+      for (final phase in kLetterPhases) {
+        expect(phase.words.length, inInclusiveRange(2, 3), reason: phase.title);
+        expect(phase.words.map((w) => w.id).toSet(), hasLength(phase.words.length), reason: phase.title);
+        for (final word in phase.words) {
+          expect(
+            word.name.split('').any((char) => isSameLetter(char, phase.letter)),
+            isTrue,
+            reason: '${word.name} não tem a letra ${phase.letter}',
+          );
         }
       }
     });
 
     test('toda letra menos o H tem áudio (o H não tem som)', () {
-      for (final phases in kLetterPhases.values) {
-        for (final phase in phases) {
-          expect(File(phase.audioPath).existsSync(), phase.letter != 'H', reason: phase.audioPath);
-        }
+      for (final phase in kLetterPhases) {
+        expect(File(phase.audioPath).existsSync(), phase.letter != 'H', reason: phase.audioPath);
       }
     });
 
     test('linha do tempo da boquinha começa e termina em repouso, em ordem', () {
-      for (final phases in kLetterPhases.values) {
-        for (final phase in phases) {
-          final keyframes = phase.keyframes;
-          expect(keyframes.first.at, 0, reason: phase.title);
-          expect(keyframes.last.at, 1, reason: phase.title);
-          expect(keyframes.first.pose, same(MouthPose.rest), reason: phase.title);
-          expect(keyframes.last.pose, same(MouthPose.rest), reason: phase.title);
-          for (var i = 1; i < keyframes.length; i++) {
-            expect(keyframes[i].at, greaterThan(keyframes[i - 1].at), reason: phase.title);
-          }
+      for (final phase in kLetterPhases) {
+        final keyframes = phase.keyframes;
+        expect(keyframes.first.at, 0, reason: phase.title);
+        expect(keyframes.last.at, 1, reason: phase.title);
+        expect(keyframes.first.pose, same(MouthPose.rest), reason: phase.title);
+        expect(keyframes.last.pose, same(MouthPose.rest), reason: phase.title);
+        for (var i = 1; i < keyframes.length; i++) {
+          expect(keyframes[i].at, greaterThan(keyframes[i - 1].at), reason: phase.title);
         }
       }
     });
@@ -183,11 +171,10 @@ void main() {
 
     test('todo áudio nas pastas é de uma letra ou palavra de exemplo (nome errado nunca seria achado)', () {
       final expected = {
-        for (final phases in kLetterPhases.values)
-          for (final phase in phases) ...[
-            phase.audioPath,
-            for (final word in phase.words) wordAudioPath(word),
-          ],
+        for (final phase in kLetterPhases) ...[
+          phase.audioPath,
+          for (final word in phase.words) wordAudioPath(word),
+        ],
       };
       for (final folder in const ['assets/audio/letters', 'assets/audio/words']) {
         final files = Directory(folder)

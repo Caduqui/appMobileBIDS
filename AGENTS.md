@@ -9,7 +9,8 @@ App Flutter infantil para ensinar português a crianças. Hoje tem:
 
 - **Lobby** (`HomeScreen`) → **Escolha do jogo** (`MinigamesScreen`) →
   **Escolha de dificuldade** (`DifficultyScreen`) → **Escolha de fase**
-  (`PhasesScreen`) → **Jogo**.
+  (`PhasesScreen`) → **Jogo**. O Sons das Letras é a exceção: do card vai
+  direto pra **Escolha de letra** (`LetterPickerScreen`, A–Z) → **Jogo**.
 - Dois minigames implementados: **Jogo da Memória** e **Complete a Palavra**.
   Cada um tem 3 dificuldades (Fácil/Médio/Difícil), com 8 fases no Fácil e no
   Médio e 7 no Difícil (ver `_expectedPhaseCounts` em
@@ -18,14 +19,21 @@ App Flutter infantil para ensinar português a crianças. Hoje tem:
   fases não precisa ser igual entre dificuldades — o Difícil tem 1 fase a
   menos porque "Transportes" só existe lá uma vez (não duplicamos tema dentro
   da mesma dificuldade).
-- Terceiro minigame: **Sons das Letras**. Uma letra por fase, em ordem
-  alfabética (Fácil A–I, Médio J–R, Difícil S–Z): a letra grande de um lado
+- Terceiro minigame: **Sons das Letras**. Uma letra por fase, de A a Z,
+  **sem dificuldade**: o menu é uma tela só com as 26 letras e "Próxima
+  letra" percorre o alfabeto inteiro. (Antes era dividido em Fácil A–I,
+  Médio J–R, Difícil S–Z, e o usuário mudou de ideia: não faz sentido o
+  alfabeto ter dificuldade. Não volte pros blocos.) A letra grande de um lado
   e, ao lado, a **"boquinha"** (termo da fonoaudiologia, Método das
   Boquinhas) fazendo o som da letra ("mmm", "fff" — o som, não o nome
   "eme", "efe"), mais **2 ou 3 palavras de exemplo** que têm a letra (no
   começo, meio ou fim, como nos slides do método). A
   boquinha é uma foto real de boca, animada em código, com o áudio do som tocando
   junto; ver "Boquinhas e áudios" abaixo.
+- Som em todo o app: **efeitos** (toque em botão/card, virar carta,
+  encaixar letra, acerto, erro, vitória) e **música de fundo** em loop, uma
+  nos menus e outra nos jogos, que some durante as falas do Sons das Letras.
+  Ver "Sons e música de fundo" abaixo.
 - Existe também uma tela de alfabetização (traçar letras) que foi **começada
   e depois toda comentada** — ver seção "Código morto" abaixo.
 - O app roda em celular e tablet, retrato e paisagem (as 4 orientações estão
@@ -40,17 +48,18 @@ Mantenha esse padrão ao editar.
 ```
 flutter pub get        # instalar dependências
 flutter analyze        # lint estático — deve ficar limpo (ver exceção abaixo)
-flutter test           # roda toda a suíte (~340 testes, ~20s)
+flutter test           # roda toda a suíte (~350 testes, ~20s)
 flutter run             # roda em device/emulador conectado
 flutter build apk --release   # gera o APK para instalar manualmente
 dart run tool/gen_audio_envelopes.dart   # após trocar/adicionar um .mp3 (precisa do ffmpeg)
 dart run tool/gen_azure_voice.dart <pasta> [nomes...]   # gera áudio com a voz Yara (ver "Boquinhas e áudios")
+bash tool/treat_sound.sh sfx|music <entrada> <saída>   # trata efeito/música antes de ir pro app (ver "Sons e música de fundo")
 ```
 
 O Flutter deste ambiente é o 3.44.9 (stable), instalado em
 `~/Downloads/flutter_windows_3.44.9-stable`(ou já no PATH). Rode `flutter
 doctor` se algo parecer errado com o toolchain. O app usa plugin nativo
-(`video_player`), e no Windows o Flutter só compila app com plugin se o
+(`video_player` e `audioplayers`), e no Windows o Flutter só compila app com plugin se o
 **Modo de Desenvolvedor** estiver ligado (`start ms-settings:developers`) —
 sem ele, `flutter run`/`build` falha pedindo "symlink support".
 
@@ -70,6 +79,7 @@ controllers/   — ChangeNotifier com a lógica de cada jogo. Sem Flutter widget
 widgets/       — peças de UI reutilizáveis entre telas.
 screens/       — telas (StatelessWidget de navegação / StatefulWidget de jogo).
 utils/         — helpers sem estado (hoje só responsividade).
+audio/         — efeitos e música de fundo (GameAudio). Telas e widgets usam.
 ```
 
 ### models/
@@ -115,13 +125,13 @@ utils/         — helpers sem estado (hoje só responsividade).
   vez de "Banana/Abacaxi/Laranja", e "Uva" em vez de "Maçã") — são crianças
   que ainda não leem/escrevem, e acentuação é complexidade a mais que não
   ajuda nessa fase. "Uva" é o caso mínimo do sistema: 3 letras, 1 só lacuna.
-- `letter_phases.dart` — `kLetterPhases`: uma `LetterPhase` por letra, com a
+- `letter_phases.dart` — `kLetterPhases`: `List<LetterPhase>` única, de A
+  a Z (sem `Difficulty`), uma `LetterPhase` por letra, com a
   pose da boca (`mouth`, e `release` nos sons que estouram), 2–3 `words` do
   `word_catalog.dart` e os caminhos derivados da letra (`audioPath`,
   `videoPath`). As poses ficam em constantes no topo do arquivo (`_a`,
   `_lipsClosed`, `_teethOnLip`...) e são compartilhadas por letras com a
-  mesma articulação (P/B, F/V, S/Z, C/G/K/Q). A divisão alfabética foi
-  escolha do usuário, não uma escala fonética.
+  mesma articulação (P/B, F/V, S/Z, C/G/K/Q).
 - `audio_envelopes.dart` — **gerado** por `tool/gen_audio_envelopes.dart`,
   não edite à mão: o volume (0–100) de cada `.mp3` de `assets/audio/` a cada
   10 ms. É o que sincroniza a boca com o som (ver "Boquinhas e áudios").
@@ -189,8 +199,15 @@ controller em `initState`/`dispose`.
   `Difficulty → List<String>`) e `gameBuilder` (função `(Difficulty, int) →
   Widget`) de quem as chama. **Um minigame novo não deveria precisar de telas
   de dificuldade/fase próprias** — só instanciar `DifficultyScreen` com os
-  parâmetros certos, como `minigames_screen.dart` já faz pros dois jogos
-  existentes. Botões/cards escalam em tablet (`responsiveValue`).
+  parâmetros certos, como `minigames_screen.dart` já faz pra Memória e o
+  Complete a Palavra. Botões/cards escalam em tablet (`responsiveValue`).
+  Só um jogo sem níveis (como o Sons das Letras) tem menu próprio.
+- `letter_picker_screen.dart` — `LetterPickerScreen`, o menu do Sons das
+  Letras: as 26 letras ("Aa", "Bb"...) num `Wrap` centralizado. O tamanho
+  dos botões é calculado (`_fittingTileSize`, dentro de um `LayoutBuilder`)
+  pra o alfabeto inteiro caber na tela sem rolar em qualquer dispositivo e
+  orientação — criança pequena não sabe rolar —, com teto por
+  `responsiveValue` e um mínimo que, numa tela minúscula, deixa rolar.
 - `memory_game_screen.dart` — tela do jogo da memória. Recebe `difficulty` +
   `phaseIndex`, busca a fase em `kMemoryPhases`, instancia o controller e tem
   botão "Próxima fase" que faz `pushReplacement` pra `phaseIndex + 1` quando
@@ -212,15 +229,29 @@ controller em `initState`/`dispose`.
   suficientes pra quebrar em 2 linhas no `Wrap` e não caber na altura). Os dois
   layouts chamam os mesmos métodos privados (`_buildWordCard`, `_buildSlots`,
   `_buildTiles`, `_buildFooter`) — ao mudar uma peça da UI, mexa no método, não
-  duplique entre os dois layouts.
-- `letter_sounds_screen.dart` — tela do Sons das Letras, mesmo padrão de
-  `difficulty`/`phaseIndex`/`pushReplacement`. **Sem controller em
+  duplique entre os dois layouts. **Retorno da letra (pedido do usuário):**
+  letra certa → a voz Yara fala o **nome** da letra ("eme", não o som
+  "mmm"); letra errada → só aquela peça da bandeja fica vermelha e treme na
+  horizontal (`_wrongTileId` + um `ShakeWidget` por peça, contador em
+  `_shakeKeys`) com o som de erro "tã-tã"; palavra completa → a voz fala a
+  palavra, depois uma comemoração sorteada ("Parabéns!", "Muito bem!", "Isso
+  aí!") e só então a vinheta de vitória (`_celebrate`). A última letra não
+  fala o nome, vai direto pra palavra. "Próxima palavra", "Jogar novamente"
+  e sair da tela cortam a fala em andamento (`GameAudio.stopVoice`). O
+  controller só avisa acerto/erro; qual peça foi tocada a tela guarda em
+  `_tappedTile`.
+- `letter_sounds_screen.dart` — tela do Sons das Letras. Recebe só
+  `phaseIndex` (posição em `kLetterPhases`, 0 = A) e "Próxima letra" faz
+  `pushReplacement` pra `phaseIndex + 1` até o Z. Sem dificuldade, a cor é
+  uma só, `kLetterSoundsColor` (roxo do card do jogo). **Sem controller em
   `controllers/`** de jogo: não há regra, só tocar som e mexer a boca. A
   boquinha é o `LipSyncPlayer` tocando `letterTrack`/`wordTrack`, desenhada
   por `MouthView` (foto deformada) — **a boca fala junto tanto o som da
   letra quanto as palavras**. O som é um `VideoPlayerController` do plugin
-  `video_player` (que toca áudio puro também — por isso não há plugin de
-  áudio separado). Os áudios das palavras são abertos já ao entrar na tela
+  `video_player` (que toca áudio puro também; os efeitos e a música de
+  fundo é que usam o `audioplayers`, ver "Sons e música de fundo"). A
+  música de fundo some enquanto a fala toca (`_updateDuck`, que olha o
+  `LipSyncPlayer.isPlaying` e, no modo vídeo, o próprio vídeo). Os áudios das palavras são abertos já ao entrar na tela
   (abrindo só no toque, o som saía atrasado). Tudo que é mídia é conferido
   no `AssetManifest` antes de abrir: letra sem áudio anima em silêncio,
   palavra sem áudio não faz nada ao toque. Se existir `assets/videos/letters/<letra>
@@ -326,7 +357,8 @@ dart` e `completion_game_screen.dart`.
 
 **Boquinha (foto real animada).** `models/mouth_pose.dart` (`MouthPose`:
 abertura dos lábios, queixo, largura, bico, lábios apertados, dentes no
-lábio, ponta e fundo da língua — tudo 0–1, interpolável) +
+lábio, e a língua: ponta, dorso da frente, fundo e ponta fina — tudo 0–1,
+interpolável) +
 `widgets/mouth_view.dart` (`MouthView`). O usuário achou a boca desenhada
 "de desenho" demais e pediu uma boca de gente real, a mesma em todas as
 letras: é **uma foto só**, `assets/images/mouth/mouth.jpg` (Pexels, foto
@@ -345,6 +377,41 @@ deformação ou o interior, mexa no painter. Não dá pra julgar o resultado
 lendo o código: renderize as poses num PNG (um `testWidgets` temporário
 com `tester.runAsync` — a foto só decodifica com I/O real — e
 `RepaintBoundary.toImage`) e olhe, inclusive ampliado.
+
+**Língua.** O usuário pediu a língua no mesmo nível de realismo da foto, e
+a primeira (uma forma chapada com degradê) não estava. Hoje ela é uma
+superfície 3D simples (`_paintTongue`): o corte do meio da língua, do
+assoalho da boca por baixo até a ponta e daí até a raiz, é uma curva por 6
+pontos que a pose move, abaulada nas bordas e com o sulco no meio; a malha
+é projetada com perspectiva e iluminada ponto a ponto (luz "enrolada" de
+tecido mole, brilho úmido, sombra do fundo da boca e dos dentes), com uma
+textura gerada em código (`_tongueTexture`: papilas no dorso; lado de
+baixo liso, com veias e o freio). Por isso a mesma malha mostra o dorso
+deitado ("A"), a ponta subindo e mostrando o lado de baixo ("L", "T"), o
+dorso da frente no palato ("I", "LH", "NH") e o fundo no véu ("C", "G").
+As bordas vão pra cor do degradê do fundo da boca naquele ponto (não pro
+preto), senão viram manchas mais escuras que a boca. As posições de cada
+som seguem a fonética articulatória do português do Brasil: T/D/N/L e o
+"r" fraco com a ponta nos alvéolos (o "L" com a ponta fina e os lados
+baixos), LH/NH com o dorso no palato duro e a ponta embaixo, C/G/K/Q e o
+"r" forte com o fundo no véu, S com a ponta perto dos alvéolos, X/J um
+pouco mais atrás, e as vogais pela altura e anterioridade. Na palavra,
+nos sons de lábio (P/B/M/F/V) a língua já vai pra vogal seguinte.
+
+**Dentes.** Pelo mesmo motivo (retângulos com degradê pareciam "teclas"),
+cada dente é uma malhinha 3D (`_paintTeeth`) com medidas reais em mm
+(`_upperTeeth`/`_lowerTeeth`, `_mm` = 28 px): incisivo central largo,
+lateral menor e mais curto, canino e pré-molares com ponta, numa arcada
+em parábola (`_arch`) — os de trás recuam e escurecem. Luz ponto a ponto
+com a mesma câmera da língua; o brilho do esmalte usa uma normal que gira
+mais de lado a lado (sai uma faixinha vertical; com a normal da luz
+difusa saía uma faixa horizontal de metal). Borda translúcida azulada,
+colo amarelado, textura de esmalte (`_enamelTexture`) e sombra estreita
+do lábio (larga deixava o pedaço visível todo cinza). Os de baixo ficam
+2,5 mm atrás e 2,5 mm acima da borda dos de cima (sobremordida), e a
+borda dos de cima fica 1,5 mm abaixo da linha dos lábios — senão no
+sorriso ("I", "S") apareciam mais os de baixo. Os dentes se encostam
+(fresta mostra o preto da boca) e há gengiva atrás perto do colo.
 
 **Sincronia boca ↔ som.** A boca não anda num tempo fixo: é guiada pelo
 volume real de cada áudio (`data/audio_envelopes.dart`, gerado com o
@@ -419,9 +486,110 @@ código com áudio gravado, também descartada por parecer desenho; a atual
 aparelho nem pra boca 100% desenhada. Os áudios gerados uma vez com a Yara e
 gravados no app são outra coisa, e ficam.
 
+## Sons e música de fundo
+
+`lib/audio/game_audio.dart` tem a regra: `Sfx` (efeitos) e `MusicTrack`
+(músicas) como enums com o caminho do arquivo, e o `GameAudio.instance`,
+um só pro app inteiro porque a música atravessa as telas. Quem toca de fato
+é um `AudioBackend`: o padrão é o `SilentAudioBackend` (mudo), e só o
+`main()` liga o `AudioplayersBackend` (`audioplayers_backend.dart`). Por
+isso os testes, que montam as telas sem passar pelo `main()`, rodam mudos e
+sem plugin nativo, e a regra é testada com um backend falso
+(`test/game_audio_test.dart`). Toda falha de áudio vira só um `debugPrint`:
+som nunca pode travar a navegação.
+
+- **Efeitos:** `GameAudio.instance.play(Sfx.tap)`. Os botões/cards de
+  navegação tocam `tap` dentro do próprio widget privado (`_HomeButton`,
+  `_MinigameCard`, `_DifficultyButton`, `_PhaseCard`, `_LetterTile`, os
+  `_FooterButton` dos jogos), não em cada `onTap` de quem chama. Nos jogos
+  os controllers avisam por callback (`onCardFlipped`, `onMismatch`,
+  `onMatchFound` na memória; `onLetterPlaced`, `onWrongLetter`,
+  `onWordSolved` no Complete a Palavra) e a tela toca o som; o último par
+  da memória toca só `win`, não `correct` junto. No Sons das Letras
+  não há som de toque na letra, na boca nem nas palavras: o toque já toca
+  a fala.
+- **Falas (Complete a Palavra):** `GameAudio.say([clipes])` fala em
+  sequência num player próprio do `audioplayers` (não o `video_player` do
+  Sons das Letras, que precisa da posição pra boca; aqui não há boca), com a
+  música abaixada do começo ao fim, e devolve `false` se outra fala ou
+  `stopVoice()` cortou — quem chamou não continua (ex.: não toca a vinheta
+  de uma palavra que a criança já pulou). Os caminhos ficam em
+  `audio/voice_clips.dart` (`letterNameClip`, `wordClip`, `cheerClips`), e a
+  tela pré-carrega as falas da fase ao abrir (`GameAudio.preload`), senão o
+  nome da letra sairia atrasado no primeiro toque.
+- **Música:** cada tela embrulha o `Scaffold` em
+  `BackgroundMusic(track: ...)` (`widgets/background_music.dart`): menus
+  (lobby, escolha de jogo, dificuldade, fase, letra) com `MusicTrack.menu`,
+  jogos com `MusicTrack.game`. Pedir a faixa que já toca não faz nada, então
+  ela segue sem cortar entre telas do mesmo contexto; ao voltar de um jogo, o
+  `RouteObserver` (`musicRouteObserver`, registrado no `MaterialApp`) avisa
+  a tela de baixo (`didPopNext`) e ela pede a faixa dela de novo. App em
+  segundo plano pausa a música (`AppLifecycleListener` no `GameAudio`).
+  **Tela nova: embrulhe em `BackgroundMusic`**, senão ela fica com a música
+  da tela anterior.
+- **Abaixar durante a fala:** `GameAudio.setDucked(true)` zera a música na
+  hora; `setDucked(false)` devolve depois de 600 ms (a criança costuma tocar
+  de novo logo em seguida, e a música não fica subindo e descendo).
+  `now: true` ao sair da tela, pra não deixar timer pendurado.
+- **Volumes:** os arquivos são normalizados por `tool/treat_sound.sh`
+  (efeitos com média -18 dB em WAV mono, músicas com média -20 dB em mp3
+  estéreo, só ganho constante pro loop não ganhar degrau). O volume do
+  player fica em `MusicTrack.volume` (menu 0,5; jogo 0,3, uns 16 dB abaixo
+  das falas) e `GameAudio.sfxVolume` (0,6).
+- **Por que o plugin `audioplayers`** (escolhido pelo usuário) além do
+  `video_player`: o `video_player` abre um player pesado por arquivo e
+  demora pra começar, então o clique sairia atrasado. Os efeitos ficam
+  pré-carregados em modo de baixa latência (SoundPool no Android), dois
+  players por efeito. O contexto de áudio é `mixWithOthers` (no Android,
+  sem pedir foco de áudio): senão o `video_player` perderia o foco e
+  pausaria a fala da letra quando um efeito tocasse.
+- **Pastas:** `assets/sfx/`, `assets/music/` e `assets/voice/`
+  (`letter_names/<letra>.mp3`, `words/<id da palavra>.mp3`,
+  `cheers/<id>.mp3`), **fora de `assets/audio/`** de propósito, porque lá
+  todo `.mp3` precisa de curva de volume pra boca (`lip_sync_test`) e a
+  lista de palavras tem que ser exatamente a do Sons das Letras
+  (`game_data_test`). As falas de `assets/voice/` saem do mesmo
+  `tool/gen_azure_voice.dart` (`dart run tool/gen_azure_voice.dart <saída>
+  voice` gera só elas) e são tratadas com `tool/treat_audio.sh` sem duração
+  alvo, como as palavras do Sons das Letras. Pra trocar um som: trate com `bash tool/treat_sound.sh
+  sfx|music <entrada> <saída>` (ffmpeg fora do PATH: `FFMPEG=<caminho do
+  ffmpeg.exe>`) e grave por cima com o mesmo nome. Não dá pra ouvir daqui:
+  os efeitos foram escolhidos pelo nome, pela duração e pela melodia
+  (subindo = alegre), e vale o usuário ouvir no aparelho.
+
+**Origem e licença** (todos CC0, domínio público: uso livre em app, sem
+crédito obrigatório; por isso não há tela de créditos):
+
+| Arquivo | Origem | Autor | Licença |
+|---|---|---|---|
+| `music/menu.mp3` | "Children's March Theme" (1:04, loop), opengameart.org/content/childrens-march-theme | CleytonKauffman | CC0 |
+| `music/game.mp3` | "Children's Game Music 4 - Activity" (0:52; o autor não diz que emenda em loop, o fim é um pouco mais baixo que o começo), opengameart.org/content/childrens-game-music-4-activity | heartade | CC0 |
+| `sfx/tap.wav` | `select_001.ogg` do pacote Interface Sounds, kenney.nl/assets/interface-sounds | Kenney | CC0 |
+| `sfx/flip.wav` | `drop_002.ogg` (Interface Sounds) | Kenney | CC0 |
+| `sfx/place.wav` | `pluck_002.ogg` (Interface Sounds) | Kenney | CC0 |
+| `sfx/correct.wav` | `confirmation_001.ogg` (Interface Sounds) | Kenney | CC0 |
+| `sfx/wrong.wav` | `jingles_SAX09.ogg` (Music Jingles): duas notas descendo no sax, o "tã-tã" de erro que o usuário pediu (o som famoso de TV tem direitos autorais) | Kenney | CC0 |
+| `sfx/win.wav` | `jingles_STEEL10.ogg` do pacote Music Jingles, kenney.nl/assets/music-jingles | Kenney | CC0 |
+
+Outras opções que o usuário viu e não escolheu (todas CC0 no OpenGameArt):
+"Children's Game Music 1 - Picnic" e "3 - Home" (heartade), "Happy Clappy
+Loop" (OwlishMedia), "Flowerbed Fields" (Zane Little Music), "Ukulele
+Forest" (StarNinjas). Kevin MacLeod (incompetech.com) é CC-BY 4.0: daria pra
+usar, mas exigiria uma tela de créditos no app.
+
 ## Testes
 
-Quatro arquivos em `test/`, todos relevantes — não pule a suíte:
+Cinco arquivos em `test/`, todos relevantes — não pule a suíte:
+
+- `game_audio_test.dart` — regra do `GameAudio` com um backend falso: a
+  mesma música não reinicia entre telas, a fala abaixa a música na hora e
+  ela volta depois do atraso (e não sobe entre dois toques seguidos), app em
+  segundo plano pausa, falha do áudio não vira exceção, falas em sequência
+  (e a cortada não continua), e todo arquivo de `Sfx`/`MusicTrack` existe e
+  fica fora de `assets/audio/`. Também confere que existe a fala do nome de
+  cada letra, de cada palavra do Complete a Palavra e das comemorações:
+  **palavra nova numa fase do Complete a Palavra precisa da fala** (rode
+  `dart run tool/gen_azure_voice.dart <saída> voice/words/<id>`).
 
 - `lip_sync_test.dart` — toda curva de volume existe e corresponde a um
   `.mp3` (gerador em dia), toda palavra tem áudio, trilhas de letra e
@@ -433,7 +601,7 @@ Quatro arquivos em `test/`, todos relevantes — não pule a suíte:
   fases esperado (`_expectedPhaseCounts`, hoje 8/8/7), nº certo de itens por
   fase, ids únicos, PNGs referenciados existem de fato no disco, palavras do
   Complete a Palavra comportam as lacunas da dificuldade, alfabeto do Sons
-  das Letras completo e em ordem, 2–3 palavras com a letra, áudio de toda
+  das Letras completo e em ordem (A–Z, lista única), 2–3 palavras com a letra, áudio de toda
   letra menos o H, nomes de vídeo e áudio
   na convenção. **Qualquer fase
   nova precisa passar aqui — e se mudar a contagem de fases de alguma
@@ -443,7 +611,7 @@ Quatro arquivos em `test/`, todos relevantes — não pule a suíte:
   acento nunca sumir, letra errada não preenche, avançar de palavra/fase.
 - `widget_test.dart` — fluxo de navegação ponta a ponta e testes de layout
   (centralização, proporção de imagem, sem overflow). Roda **todas as fases
-  dos três jogos em 4 combinações de dispositivo** (`_useDevice` +
+  dos três jogos, e o menu de letras A–Z, em 4 combinações de dispositivo** (`_useDevice` +
   `_devicePortraitPhone`/`_deviceLandscapePhone`/`_devicePortraitTablet`/
   `_deviceLandscapeTablet`, todas a `devicePixelRatio: 3.0`) só pra pegar
   overflow — é a rede de segurança contra nome/palavra comprida ou grid
@@ -452,7 +620,9 @@ Quatro arquivos em `test/`, todos relevantes — não pule a suíte:
   ganhar um teste equivalente) em vez de só ser testada em celular retrato.
   Tem também testes específicos do swap de colunas/linhas do grid da memória
   (`grid da memória inverte/mantém...`) e do layout lado a lado do lobby em
-  paisagem. Testes de tela do Sons das Letras chamam `_letVideoLoad(tester)`
+  paisagem, e de que o menu de letras mostra as 26 dentro da tela e o
+  "Próxima letra" passa do I pro J e some no Z, e de que no Complete a
+  Palavra a letra errada fica vermelha, treme e depois volta ao normal. Testes de tela do Sons das Letras chamam `_letVideoLoad(tester)`
   pra deixar a leitura (real) do `AssetManifest` terminar — o relógio falso
   do `testWidgets` não avança I/O sozinho. Ao mexer em `home_screen.dart`/
   `minigames_screen.dart`, note os testes que leem posição/tamanho via `tester.getRect` — eles fixam números
@@ -482,8 +652,9 @@ deliberada deixá-los como referência futura.
   (pacote antigo) e `.../com/example/linguagens/MainActivity.kt` (pacote
   atual, usado pelo `applicationId` em `android/app/build.gradle.kts`). O
   primeiro é resto de um rename do projeto; não afeta o build mas é lixo.
-- **`pubspec.yaml` `assets:`** lista `assets/fruits/`, `assets/images/mouth/` e
-  `assets/images/background/`, mas não `assets/images/letters/` (código
+- **`pubspec.yaml` `assets:`** lista `assets/fruits/`, `assets/images/mouth/`,
+  `assets/images/background/`, as pastas de áudio/vídeo e `assets/sfx/` +
+  `assets/music/`, mas não `assets/images/letters/` (código
   morto, ok) nem arquivos individuais fora dessas pastas — se adicionar uma
   pasta de assets nova, lembre de declará-la aqui.
 - **`README.md`** ainda é o boilerplate padrão do `flutter create`.

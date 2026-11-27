@@ -253,7 +253,11 @@ class _Viseme {
   final bool vowel;
   final double weight;
 
-  const _Viseme(this.pose, {this.vowel = false, this.weight = 1});
+  /// Som feito só com os lábios ("p", "b", "m", "f", "v"): a língua fica
+  /// livre e já vai pra posição da vogal seguinte.
+  final bool labial;
+
+  const _Viseme(this.pose, {this.vowel = false, this.weight = 1, this.labial = false});
 }
 
 /// Poses de uma palavra, uma por som (não por letra: "qu", "ch", "ss"...
@@ -282,7 +286,7 @@ List<_Viseme> _visemes(String word) {
   void consonant(String letter) {
     final phase = _phase(letter);
     final stop = phase.release != null;
-    out.add(_Viseme(phase.mouth, weight: stop ? 0.7 : 1));
+    out.add(_Viseme(phase.mouth, weight: stop ? 0.7 : 1, labial: 'BPMFV'.contains(letter)));
   }
 
   for (var i = 0; i < s.length; i++) {
@@ -324,7 +328,7 @@ List<_Viseme> _visemes(String word) {
         if (at(i + 1) == 'u' && soft.contains(at(i + 2))) i++;
       case 'l':
         if (at(i + 1) == 'h') {
-          consonant('L');
+          out.add(const _Viseme(kLhPose));
           i++;
         } else if (!isVowel(i + 1)) {
           vowel('U'); // "l" no fim da sílaba soa "u" ("alfinete")
@@ -333,7 +337,7 @@ List<_Viseme> _visemes(String word) {
         }
       case 'n':
         if (at(i + 1) == 'h') {
-          consonant('N');
+          out.add(const _Viseme(kNhPose));
           i++;
         } else if (isVowel(i + 1)) {
           consonant('N');
@@ -343,14 +347,36 @@ List<_Viseme> _visemes(String word) {
         if (isVowel(i + 1) || at(i + 1) == 'b' || at(i + 1) == 'p') {
           consonant('M');
         }
-      case 'r' || 's':
-        consonant(c.toUpperCase());
-        if (at(i + 1) == c) i++; // "rr", "ss"
+      case 'r':
+        // "R" forte (fundo da língua) no começo da palavra, no "rr" e
+        // depois de "n"/"l"/"s" ("honra"); nos outros casos ("pera",
+        // "zebra", "porta") é o fraco, a ponta da língua batendo.
+        if (i == 0 || at(i + 1) == 'r' || 'nls'.contains(at(i - 1))) {
+          consonant('R');
+          if (at(i + 1) == 'r') i++;
+        } else {
+          out.add(const _Viseme(kTapPose, weight: 0.6));
+        }
+      case 's':
+        consonant('S');
+        if (at(i + 1) == 's') i++; // "ss"
       case 'k':
         consonant('K');
       default:
         consonant(c.toUpperCase());
     }
+  }
+  // Coarticulação: nos sons de lábio a língua não tem o que fazer e já se
+  // prepara pra vogal seguinte (no fim da palavra, fica na anterior) — em
+  // "pipa" ela fica no "i" o tempo todo, em vez de cair no "p".
+  for (var j = 0; j < out.length; j++) {
+    if (!out[j].labial) continue;
+    final next = out.indexWhere((v) => v.vowel, j + 1);
+    final previous = out.lastIndexWhere((v) => v.vowel, j);
+    final source = next >= 0 ? next : previous;
+    if (source < 0) continue;
+    final v = out[j];
+    out[j] = _Viseme(v.pose.withTongueOf(out[source].pose), weight: v.weight, labial: true);
   }
   return out;
 }
@@ -358,8 +384,7 @@ List<_Viseme> _visemes(String word) {
 MouthPose _pose(String letter) => _phase(letter).mouth;
 
 final _phasesByLetter = {
-  for (final phases in kLetterPhases.values)
-    for (final phase in phases) phase.letter: phase,
+  for (final phase in kLetterPhases) phase.letter: phase,
 };
 
 LetterPhase _phase(String letter) => _phasesByLetter[letter]!;

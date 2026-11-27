@@ -6,6 +6,7 @@ import 'package:linguagens/data/memory_phases.dart';
 import 'package:linguagens/main.dart';
 import 'package:linguagens/models/difficulty.dart';
 import 'package:linguagens/screens/completion_game_screen.dart';
+import 'package:linguagens/screens/letter_picker_screen.dart';
 import 'package:linguagens/screens/letter_sounds_screen.dart';
 import 'package:linguagens/models/mouth_pose.dart';
 import 'package:linguagens/screens/memory_game_screen.dart';
@@ -281,29 +282,44 @@ void main() {
           expect(kCompletionPhases[difficulty]![i].words, isNotEmpty);
         });
       }
+    }
 
-      final letterPhaseCount = kLetterPhases[difficulty]!.length;
-      for (var i = 0; i < letterPhaseCount; i++) {
-        testWidgets(
-            'sons das letras ${difficulty.label} fase ${i + 1} (${deviceEntry.key}) renderiza sem erro',
-            (tester) async {
-          _useDevice(tester, deviceEntry.value);
-          final phase = kLetterPhases[difficulty]![i];
-          await tester.pumpWidget(MaterialApp(
-            home: LetterSoundsScreen(difficulty: difficulty, phaseIndex: i),
-          ));
-          await _letVideoLoad(tester);
-          expect(tester.takeException(), isNull);
-          expect(find.text('${phase.letter}${phase.letter.toLowerCase()}'), findsOneWidget);
+    // Sons das Letras não tem dificuldade: o menu de letras e cada uma das
+    // 26 letras, em todos os dispositivos.
+    testWidgets('menu de letras A–Z (${deviceEntry.key}) cabe sem rolar e sem erro', (tester) async {
+      _useDevice(tester, deviceEntry.value);
+      await tester.pumpWidget(const MaterialApp(home: LetterPickerScreen()));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
 
-          await tester.pumpWidget(const SizedBox());
-          await tester.pump(const Duration(seconds: 2));
-        });
+      final size = tester.view.physicalSize / tester.view.devicePixelRatio;
+      for (final phase in kLetterPhases) {
+        final rect = tester.getRect(find.text('${phase.letter}${phase.letter.toLowerCase()}'));
+        expect(rect.bottom, lessThanOrEqualTo(size.height), reason: '${phase.letter} fora da tela');
+        expect(rect.right, lessThanOrEqualTo(size.width), reason: '${phase.letter} fora da tela');
       }
+    });
+
+    for (var i = 0; i < kLetterPhases.length; i++) {
+      final phase = kLetterPhases[i];
+      testWidgets(
+          'sons das letras ${phase.title} (${deviceEntry.key}) renderiza sem erro',
+          (tester) async {
+        _useDevice(tester, deviceEntry.value);
+        await tester.pumpWidget(MaterialApp(
+          home: LetterSoundsScreen(phaseIndex: i),
+        ));
+        await _letVideoLoad(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.text('${phase.letter}${phase.letter.toLowerCase()}'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 2));
+      });
     }
   }
 
-  testWidgets('Home → jogos → Sons das Letras → fácil → letra A', (tester) async {
+  testWidgets('Home → jogos → Sons das Letras abre direto o A–Z → letra M', (tester) async {
     _usePhoneScreen(tester);
     await tester.pumpWidget(const MemoryGameApp());
     await tester.tap(find.text('Iniciar'));
@@ -314,16 +330,48 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sons das Letras'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Fácil'));
-    await tester.pumpAndSettle();
-    expect(find.text('Letra A'), findsOneWidget);
-    expect(find.text('Letra I'), findsOneWidget);
 
-    await tester.tap(find.text('Fase 1'));
+    // Sem escolha de dificuldade: todas as letras na mesma tela.
+    expect(find.byType(LetterPickerScreen), findsOneWidget);
+    for (final d in Difficulty.values) {
+      expect(find.text(d.label), findsNothing);
+    }
+    expect(find.text('Aa'), findsOneWidget);
+    expect(find.text('Zz'), findsOneWidget);
+
+    await tester.tap(find.text('Mm'));
     await tester.pumpAndSettle();
     await _letVideoLoad(tester);
-    expect(find.text('Aa'), findsOneWidget);
+    expect(find.byType(LetterSoundsScreen), findsOneWidget);
+    expect(find.text('Sons das Letras — Letra M'), findsOneWidget);
     expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('sons das letras: "Próxima letra" segue o alfabeto inteiro e some no Z', (tester) async {
+    _usePhoneScreen(tester);
+    // Começa no I, que antes era o fim do bloco Fácil: tem que ir pro J.
+    final index = kLetterPhases.indexWhere((p) => p.letter == 'I');
+    await tester.pumpWidget(MaterialApp(home: LetterSoundsScreen(phaseIndex: index)));
+    await _letVideoLoad(tester);
+
+    await tester.tap(find.text('Próxima letra'));
+    await tester.pumpAndSettle();
+    await _letVideoLoad(tester);
+    expect(find.text('Sons das Letras — Letra J'), findsOneWidget);
+
+    // Desmonta antes: senão o MaterialApp novo reaproveita o Navigator,
+    // que continua mostrando o J.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpWidget(MaterialApp(
+      home: LetterSoundsScreen(phaseIndex: kLetterPhases.length - 1),
+    ));
+    await _letVideoLoad(tester);
+    expect(find.text('Sons das Letras — Letra Z'), findsOneWidget);
+    expect(find.text('Próxima letra'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
@@ -333,15 +381,14 @@ void main() {
     _usePhoneScreen(tester);
     // "W" é a letra com menos chance de um dia ganhar vídeo gravado; se
     // ganhar, este teste é que precisa trocar de letra.
-    final phases = kLetterPhases[Difficulty.hard]!;
-    final index = phases.indexWhere((p) => p.letter == 'W');
+    final index = kLetterPhases.indexWhere((p) => p.letter == 'W');
     await tester.pumpWidget(MaterialApp(
-      home: LetterSoundsScreen(difficulty: Difficulty.hard, phaseIndex: index),
+      home: LetterSoundsScreen(phaseIndex: index),
     ));
     await _letVideoLoad(tester);
 
     expect(find.byType(MouthView), findsOneWidget);
-    for (final word in phases[index].words) {
+    for (final word in kLetterPhases[index].words) {
       expect(find.text(word.name, findRichText: true), findsOneWidget);
     }
 
@@ -352,7 +399,7 @@ void main() {
   testWidgets('sons das letras: a boquinha se mexe ao tocar e volta ao repouso', (tester) async {
     _usePhoneScreen(tester);
     await tester.pumpWidget(const MaterialApp(
-      home: LetterSoundsScreen(difficulty: Difficulty.easy, phaseIndex: 0),
+      home: LetterSoundsScreen(phaseIndex: 0),
     ));
     await _letVideoLoad(tester);
     // Deixa a animação automática da abertura terminar.
@@ -375,9 +422,9 @@ void main() {
 
   testWidgets('sons das letras: o H avisa que não tem som', (tester) async {
     _usePhoneScreen(tester);
-    final index = kLetterPhases[Difficulty.easy]!.indexWhere((p) => p.letter == 'H');
+    final index = kLetterPhases.indexWhere((p) => p.letter == 'H');
     await tester.pumpWidget(MaterialApp(
-      home: LetterSoundsScreen(difficulty: Difficulty.easy, phaseIndex: index),
+      home: LetterSoundsScreen(phaseIndex: index),
     ));
     await _letVideoLoad(tester);
 
@@ -385,6 +432,49 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('completar: letra errada fica vermelha e treme, depois volta', (tester) async {
+    _usePhoneScreen(tester);
+    await tester.pumpWidget(const MaterialApp(
+      home: CompletionGameScreen(difficulty: Difficulty.easy, phaseIndex: 0),
+    ));
+    await tester.pump();
+
+    // As letras "de enfeite" da bandeja nunca estão na palavra: qualquer uma
+    // delas é uma letra errada, e só aparece na bandeja (não nas casinhas).
+    final word = kCompletionPhases[Difficulty.easy]![0].words.first.name.toUpperCase();
+    final wrong = find.byWidgetPredicate((w) =>
+        w is Text &&
+        w.data != null &&
+        RegExp(r'^[A-Z]$').hasMatch(w.data!) &&
+        !word.contains(w.data!));
+    expect(wrong, findsWidgets);
+    final tile = wrong.first;
+    Color tileColor() {
+      final box = tester.widget<AnimatedContainer>(
+        find.ancestor(of: tile, matching: find.byType(AnimatedContainer)),
+      );
+      return (box.decoration! as BoxDecoration).color!;
+    }
+
+    expect(tileColor(), Colors.teal);
+    await tester.tap(tile);
+    await tester.pump();
+
+    await tester.pump(const Duration(milliseconds: 100));
+    final shake = tester.widget<Transform>(
+      find.ancestor(of: tile, matching: find.byType(Transform)).first,
+    );
+    expect(shake.transform.getTranslation().x, isNot(0.0), reason: 'tremendo');
+
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tileColor(), Colors.red);
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(tileColor(), Colors.teal, reason: 'volta ao normal depois do aviso');
+
+    await tester.pumpWidget(const SizedBox());
   });
 }
 

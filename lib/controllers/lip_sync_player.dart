@@ -39,6 +39,10 @@ class LipSyncPlayer extends ChangeNotifier {
   MouthPose _pose = MouthPose.rest;
   MouthPose get pose => _pose;
 
+  /// Uma trilha está tocando (da preparação da boca até ela fechar). A tela
+  /// usa pra abaixar a música de fundo durante a fala.
+  bool get isPlaying => _track != null;
+
   bool _disposed = false;
 
   /// Começa [track] do zero, com [audio] tocando a partir de

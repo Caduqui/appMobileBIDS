@@ -5,11 +5,9 @@ import 'package:linguagens/data/audio_envelopes.dart';
 import 'package:linguagens/data/letter_phases.dart';
 import 'package:linguagens/data/lip_sync.dart';
 import 'package:linguagens/data/word_catalog.dart';
-import 'package:linguagens/models/difficulty.dart';
 import 'package:linguagens/models/mouth_pose.dart';
 
-final _phases = [for (final d in Difficulty.values) ...kLetterPhases[d]!];
-LetterPhase _phase(String letter) => _phases.firstWhere((p) => p.letter == letter);
+LetterPhase _phase(String letter) => kLetterPhases.firstWhere((p) => p.letter == letter);
 
 void main() {
   group('curvas de volume (lib/data/audio_envelopes.dart)', () {
@@ -28,7 +26,7 @@ void main() {
     });
 
     test('toda palavra de exemplo tem áudio (a boca fala junto com ela)', () {
-      for (final phase in _phases) {
+      for (final phase in kLetterPhases) {
         for (final word in phase.words) {
           expect(kAudioEnvelopes, contains(wordAudioPath(word)), reason: word.name);
         }
@@ -38,7 +36,7 @@ void main() {
 
   group('trilha da letra', () {
     test('começa e termina em repouso, com o som depois da preparação da boca', () {
-      for (final phase in _phases) {
+      for (final phase in kLetterPhases) {
         final track = letterTrack(phase);
         expect(track.frames.first.lips, closeTo(0, 0.05), reason: phase.title);
         expect(track.frames.last.lips, closeTo(0, 0.05), reason: phase.title);
@@ -48,7 +46,7 @@ void main() {
     });
 
     test('dura o áudio inteiro (a boca não fecha antes do som acabar)', () {
-      for (final phase in _phases) {
+      for (final phase in kLetterPhases) {
         final envelope = kAudioEnvelopes[phase.audioPath];
         if (envelope == null) continue;
         final track = letterTrack(phase);
@@ -91,20 +89,56 @@ void main() {
   group('trilha da palavra', () {
     test('um som por pose, com as regras de leitura', () {
       MouthPose m(String l) => _phase(l).mouth;
-      expect(wordPoses('Bola'), [m('B'), m('O'), m('L'), m('A')]);
+      // Nos sons de lábio a língua já está na vogal seguinte.
+      MouthPose lips(String l, String vowel) => m(l).withTongueOf(m(vowel));
+      expect(wordPoses('Bola'), [lips('B', 'O'), m('O'), m('L'), m('A')]);
       // "qu" antes de "e": o "u" não soa; "o" final soa "u".
       expect(wordPoses('Queijo'), [m('Q'), m('E'), m('I'), m('J'), m('U')]);
-      // "lh" é um som só.
-      expect(wordPoses('Telhado'), [m('T'), m('E'), m('L'), m('A'), m('D'), m('U')]);
+      // "lh" é um som só, com o dorso da língua no palato (não é o "l").
+      expect(wordPoses('Telhado'), [m('T'), m('E'), kLhPose, m('A'), m('D'), m('U')]);
+      expect(wordPoses('Cozinha'), [m('C'), m('O'), m('S'), m('I'), kNhPose, m('A')]);
       // "l" no fim da sílaba soa "u"; "e" final soa "i".
-      expect(wordPoses('Alfinete'), [m('A'), m('U'), m('F'), m('I'), m('N'), m('E'), m('T'), m('I')]);
-      // "ç" soa "s", "rr" é um som só.
+      expect(
+        wordPoses('Alfinete'),
+        [m('A'), m('U'), lips('F', 'I'), m('I'), m('N'), m('E'), m('T'), m('I')],
+      );
+      // "ç" soa "s", "rr" é um som só (o "r" forte, no fundo da boca).
       expect(wordPoses('Carroça'), [m('C'), m('A'), m('R'), m('O'), m('S'), m('A')]);
-      expect(wordPoses('Xícara').first, m('X'));
+      // "r" fraco (ponta da língua): entre vogais, depois de consoante e no
+      // fim da sílaba; forte no começo da palavra.
+      expect(wordPoses('Xícara'), [m('X'), m('I'), m('C'), m('A'), kTapPose, m('A')]);
+      expect(wordPoses('Zebra')[3], kTapPose);
+      expect(wordPoses('Porta'), [lips('P', 'O'), m('O'), kTapPose, m('T'), m('A')]);
+      expect(wordPoses('Rato').first, m('R'));
+    });
+
+    test('a língua de cada som está no lugar certo', () {
+      MouthPose m(String l) => _phase(l).mouth;
+      // Ponta nos alvéolos.
+      for (final l in const ['T', 'D', 'N', 'L']) {
+        expect(m(l).tongueTip, 1, reason: l);
+        expect(m(l).tongueBack, 0, reason: l);
+      }
+      expect(m('L').tongueNarrow, greaterThan(m('N').tongueNarrow), reason: 'L é fino');
+      expect(kTapPose.tongueTip, greaterThan(0.5));
+      // Fundo no véu.
+      for (final l in const ['C', 'G', 'K', 'Q', 'R']) {
+        expect(m(l).tongueBack, greaterThan(0.5), reason: l);
+        expect(m(l).tongueTip, 0, reason: l);
+      }
+      // Dorso da frente no palato, ponta embaixo.
+      for (final pose in [m('I'), kLhPose, kNhPose]) {
+        expect(pose.tongueFront, 1);
+        expect(pose.tongueTip, 0);
+      }
+      // Vogais: "A" deitada; "E"/"I" na frente; "O"/"U" atrás, "U" mais alto.
+      expect(m('A').tongueFront + m('A').tongueBack + m('A').tongueTip, 0);
+      expect(m('E').tongueFront, inExclusiveRange(0, m('I').tongueFront));
+      expect(m('O').tongueBack, inExclusiveRange(0, m('U').tongueBack));
     });
 
     test('toda palavra tem trilha que começa e termina em repouso', () {
-      for (final phase in _phases) {
+      for (final phase in kLetterPhases) {
         for (final word in phase.words) {
           final track = wordTrack(word);
           expect(track, isNotNull, reason: word.name);
